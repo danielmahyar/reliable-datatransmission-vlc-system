@@ -1,53 +1,37 @@
-#include <stdio.h>
-#include <inttypes.h>
-#include <time.h>
-
-clock_t start, end;
-double cpu_time_used;
-
-#define TIME_FUNCTION(FUNCTION) \
-  start = clock();              \
-  FUNCTION;                     \
-  end = clock();                \
-  cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC; \
-  printf("Time taken by %s: %f\n", #FUNCTION, cpu_time_used);
-
-#define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c"
-#define BYTE_TO_BINARY(byte)         \
-    ((byte) & 0x80 ? '1' : '0'),     \
-        ((byte) & 0x40 ? '1' : '0'), \
-        ((byte) & 0x20 ? '1' : '0'), \
-        ((byte) & 0x10 ? '1' : '0'), \
-        ((byte) & 0x08 ? '1' : '0'), \
-        ((byte) & 0x04 ? '1' : '0'), \
-        ((byte) & 0x02 ? '1' : '0'), \
-        ((byte) & 0x01 ? '1' : '0')
-
-#define PRINT_BYTE_BINARY(byte) printf(BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(byte))
-#define PRINT_SHORT_BINARY(short) printf(BYTE_TO_BINARY_PATTERN BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(short >> 8), BYTE_TO_BINARY(short))
-
+#include "./manchesterecoding.h"
 
 /*
-
     Manchester Encoding
     1 -> 01
     0 -> 10
-
-    Thinking we should send Little Endian Byte ordering
-
 */
 
-/**
- * @brief Byte to Manchester Encoding
- * Returns a 16-bit Manchester Encoded Short where 
- * 1 -> 01
- * 0 -> 10
- * 
- * @example 0x11111111 -> 0b0101010101010101
- *  
- * @param input Byte to encode
- * @return uint16_t Manchester Encoded Short
- */
+int main()
+{
+    uint8_t byte = 0xFF;
+    const uint16_t res = TIME_FUNCTION(btm(byte));
+
+    PRINT_SHORT_BINARY(res);
+    printf("\n");
+    const uint8_t res2 = mtb(res);
+    PRINT_BYTE_BINARY(res2);
+
+    // uint8_t manchester_data[16] = {0};
+    // // uint8_t manchester_data2[64] = {0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0};
+    // uint8_t manchester_data2[64] = {0};
+
+    // TIME_FUNCTION(encode_manchester_byte(manchester_data, 12));
+    // uint8_t result1 = decode_manchester_byte(manchester_data);
+    // printf("Result: %d\n", result1);
+
+    // encode_manchester_word(manchester_data2, 0xFF);
+    // uint32_t result2 = (uint32_t)decode_manchester_word(manchester_data2);
+    // printf("Result: %u\n", (uint32_t)result2);
+
+    return 0;
+}
+
+
 uint16_t btm(uint8_t input)
 {
     uint16_t result = 0;
@@ -140,27 +124,4 @@ uint32_t decode_manchester_word(uint8_t *input)
 }
 
 
-int main()
-{
-    uint8_t byte = 0xFF;
-    const uint16_t res = TIME_FUNCTION(btm(byte));
 
-    PRINT_SHORT_BINARY(res);
-    printf("\n");
-    const uint8_t res2 = mtb(res);
-    PRINT_BYTE_BINARY(res2);
-
-    // uint8_t manchester_data[16] = {0};
-    // // uint8_t manchester_data2[64] = {0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0};
-    // uint8_t manchester_data2[64] = {0};
-
-    // TIME_FUNCTION(encode_manchester_byte(manchester_data, 12));
-    // uint8_t result1 = decode_manchester_byte(manchester_data);
-    // printf("Result: %d\n", result1);
-
-    // encode_manchester_word(manchester_data2, 0xFF);
-    // uint32_t result2 = (uint32_t)decode_manchester_word(manchester_data2);
-    // printf("Result: %u\n", (uint32_t)result2);
-
-    return 0;
-}
