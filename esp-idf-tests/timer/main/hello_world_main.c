@@ -17,7 +17,7 @@ void emit_half_bit(void)
 void app_main(void)
 {
 
-    uint8_t data[16] = {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1};
+    uint8_t data[16] = {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0};
 
     // configure the GPIO
     gpio_reset_pin(LED_GPIO);
@@ -30,7 +30,7 @@ void app_main(void)
         {
             gpio_set_level(LED_GPIO, data[i]);
             printf("Turning on LED %d\n", data[i]);
-            vTaskDelay(500 / portTICK_PERIOD_MS);
+            vTaskDelay(200 / portTICK_PERIOD_MS);
         }
     }
 }
