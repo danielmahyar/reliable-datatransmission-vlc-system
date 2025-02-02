@@ -5,6 +5,6 @@
         "board/esp32c3-builtin.cfg"
     ],
     "idf.toolsPath": "/Users/danielcargarmahyar/.espressif",
-    "idf.port": "/dev/tty.usbserial-110",
+    "idf.port": "/dev/tty.usbserial-210",
     "idf.flashType": "UART"
 }
