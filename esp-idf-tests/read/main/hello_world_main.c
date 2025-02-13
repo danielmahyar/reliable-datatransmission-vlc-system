@@ -5,25 +5,83 @@
 #include "freertos/FreeRTOS.h"
 #include "driver/gpio.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_system.h"
 #include <driver/adc.h>
 #include <string.h>
+#include <stdarg.h>
 
-
+// Hardware constants
 #define LED_GPIO 6
 #define ADC_CHANNEL ADC1_CHANNEL_3
-#define THRESHOLD 3000
+#define THRESHOLD 4000
 #define SAMPLING_RATE 200
-#define N 8
-#define OFFSET_DELAY SAMPLING_RATE >> 3 // 1/8 of a bit period
+#define NODE_ID 2
 
-uint8_t sync_mask[] = {0, 1, 0, 1, 0, 1, 0, 1};
+// Protocol constants
+#define MESSAGE_SIZE 20
+#define BYTE_SIZE 8
+#define BYTE_MANCHESTER_SIZE 16
+#define SYNC_BYTE 0x7E
+#define SYNC_REPEAT 10
 
-// 1001010101010101010101 - 16 bits
-// 10 01 01 01 01 01 01 01 01 01 01
-// 0  1  1 1 1 1 1 1
-// 01111111 ->
+typedef enum
+{
+    INFORMATION,
+    SUCCESS,
+    FAILURE,
+    WARNING,
+} LogLevel;
 
+typedef enum
+{
+    NOT_SYNCED,
+    TRYING_TO_SYNC,
+    SYNCED
+} ReceiverState;
+
+typedef enum
+{
+    NOT_SENDING,
+    SENDING_SYNC,
+    SENDING_MESSAGE
+} SenderState;
+
+ReceiverState receiver_state = NOT_SYNCED;
+SenderState sender_state = NOT_SENDING;
+
+
+void log(LogLevel status, char *message, ...)
+{
+    printf("%d;", status);
+    va_list args;
+    va_start(args, message);
+    vprintf(message, args);
+    va_end(args);
+    printf("\n");
+}
+
+void getLineInput(char buf[], size_t len)
+{
+    memset(buf, 0, len);
+    fpurge(stdin); // clears any junk in stdin
+
+    while (1)
+    {
+        vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
+
+        if (fgets(buf, len, stdin) != NULL)
+        {
+            // Remove newline character if present
+            size_t length = strlen(buf);
+            if (length > 0 && buf[length - 1] == '\n')
+            {
+                buf[length - 1] = '\0';
+            }
+            break;
+        }
+    }
+}
 uint8_t decode_manchester_byte(uint8_t *input)
 {
     uint8_t result = 0;
@@ -101,62 +159,56 @@ uint16_t get_adc_reading()
 uint8_t get_bit()
 {
     uint16_t adc_reading = get_adc_reading();
-    printf("ADC reading: %d\n", adc_reading);
+    // printf("ADC reading: %d\n", adc_reading);
     return adc_reading > THRESHOLD;
 }
 
-void handle_reading_logic() {
-
-    char message_from_sender[20] = {0};
+void handle_reading_logic()
+{
+    char message_from_sender[MESSAGE_SIZE] = {0};
     int message_index = 0;
-     
-    uint8_t manchester[8] = {0};
-    uint8_t manchester_encoded[16] = {0};
-    int bit_ctn = 0;
+
+    uint8_t manchester_encoded[BYTE_MANCHESTER_SIZE] = {0};
 
     uint8_t has_synced = 0;
 
     while (1)
     {
-
-        for (int i = 0; i < 16; i++)
+        for (int i = 0; i < BYTE_MANCHESTER_SIZE; i++)
         {
             manchester_encoded[i] = get_bit();
             vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
         }
 
-        for(int i = 0; i < 16; i++)
-        {
-            printf("%d", manchester_encoded[i]);
-        }
-
         uint8_t decoded_byte = decode_manchester_byte(manchester_encoded);
         // print binary representation of decoded byte
-        for(int i = 0; i < 8; i++)
+        char binary[BYTE_SIZE];
+        for (uint8_t i = 0; i < 8; i++)
         {
-            printf("%d", (decoded_byte >> i) & 1);
+            binary[i] = (decoded_byte >> i) & 1;
         }
-        printf("\n");
+        log(INFORMATION, "Decoded byte: %d - Binary: %d%d%d%d%d%d%d%d", decoded_byte, binary[7], binary[6], binary[5], binary[4], binary[3], binary[2], binary[1], binary[0]);
 
         if (has_synced == 0)
         {
+            receiver_state = TRYING_TO_SYNC;
             if (decoded_byte != 0x7E)
             {
                 uint8_t is_valid = is_valid_manchester(manchester_encoded);
-                printf("not synced - %s valid manchester \n", is_valid ? "is" : "is not");
+                log(WARNING, "Not synced - %s valid manchester", is_valid ? "is" : "is not");
+
                 if (is_valid == 0)
                 {
+                    log(INFORMATION, "Waiting for 25 ms");
                     vTaskDelay(25 / portTICK_PERIOD_MS);
                 }
                 else
                 {
-
                     uint32_t delay = SAMPLING_RATE;
                     // check if decoded byte has 2 consecutive 0s in binary representation (at some point in string)
                     if (decoded_byte == 63 || decoded_byte == 159 || decoded_byte == 207 || decoded_byte == 231 || decoded_byte == 243 || decoded_byte == 249 || decoded_byte == 252)
                     {
-                        printf("Correct bits but missing sequence. Number %d \n", decoded_byte);
-
+                        log(INFORMATION, "Correct bits but missing sequence. Number %d", decoded_byte);
                         switch (decoded_byte)
                         {
                         case 63: // 01111111
@@ -182,49 +234,46 @@ void handle_reading_logic() {
                             break;
                         }
                     }
-                    printf("Waiting for %lu ms\n", delay);
+                    log(INFORMATION, "Waiting for %lu ms", delay);
                     vTaskDelay(delay / portTICK_PERIOD_MS);
                 }
                 continue;
             }
             else
             {
-                printf("Synced\n");
+                log(SUCCESS, "SYNCED");
+                receiver_state = SYNCED;
                 has_synced = 1;
             }
         }
 
-        for (int i = 0; i < 16; i++)
-        {
-            printf("%d", manchester_encoded[i]);
-        }
-        printf("\n");
-        printf("Decoded byte: %u\n", decoded_byte);
+        log(INFORMATION, "Decoded byte: %u", decoded_byte);
 
-        if(decoded_byte != 0x7E)
+        if (decoded_byte != 0x7E)
         {
             // Assume message is being send
             message_from_sender[message_index] = decoded_byte;
+            log(INFORMATION, "Got char: %c. I expect %d characters more", decoded_byte, MESSAGE_SIZE - message_index);
             message_index++;
         }
 
-        if(message_index == 20)
+        if (message_index == MESSAGE_SIZE)
         {
-            printf("Message received: %s\n", message_from_sender);
+            log(SUCCESS, "Message received: %s", message_from_sender);
             message_index = 0;
+            has_synced = 0;
         }
-
         memset(manchester_encoded, 0, 16);
     }
 }
 
-void handle_sending_logic(){
-    char buffer[20];
-    sprintf(buffer, "Daniel 22 FFFFFFFF\n");
+char message_buffer[MESSAGE_SIZE] = "Hello World!";
+void handle_sending_logic()
+{
 
-    uint8_t data[16] = {1,0,  0, 1,   0,1,   0, 1,   0, 1,   0, 1,   0, 1,   1, 0};
-    uint8_t data_fr[] = {1,0,  0, 1,   0,1,   0, 1,   0, 1,   0, 1,   0, 1,   1, 0};
+    uint8_t data[BYTE_MANCHESTER_SIZE] = {0};
     uint8_t has_synced = 0;
+    uint8_t has_user_input = 0;
 
     // configure the GPIO
     gpio_reset_pin(LED_GPIO);
@@ -233,42 +282,72 @@ void handle_sending_logic(){
     /* Print chip information */
     while (1)
     {
-        if(has_synced == 0)
+        if (has_synced == 0)
         {
-        for(int j = 0; j < 20; j++)
-        {
-            for (int i = 0; i < 16; i++)
+            sender_state = SENDING_SYNC;
+            log(INFORMATION, "Sending sync bits [0111110]");
+            encode_manchester_byte(data, SYNC_BYTE);
+
+            // TODO: Should wait for ACK from receiver and not use SYNC_REPEAT
+            for (int j = 0; j < SYNC_REPEAT; j++)
             {
-                gpio_set_level(LED_GPIO, data[i]);
-                //printf("Turning on LED %d\n", data[i]);
+                for (uint8_t i = 0; i < BYTE_MANCHESTER_SIZE; i++)
+                {
+                    gpio_set_level(LED_GPIO, data[i]);
+                    vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
+                }
+            }
+            has_synced = 1;
+            log(INFORMATION, "Done sending sync bits");
+        }
+
+        if (has_user_input == 0)
+        {
+            log(SUCCESS, "Enter message to send: ");
+            // getLineInput(message_buffer, MESSAGE_SIZE);
+
+            log(SUCCESS, "Sending message: %s", message_buffer);
+
+            has_user_input = 1;
+        }
+        sender_state = SENDING_MESSAGE;
+        for (uint8_t i = 0; i < MESSAGE_SIZE; i++)
+        {
+            encode_manchester_byte(data, message_buffer[i]);
+            log(INFORMATION, "Sending character: %c (%d)", message_buffer[i], message_buffer[i]);
+            for (uint8_t j = 0; j < BYTE_MANCHESTER_SIZE; j++)
+            {
+                gpio_set_level(LED_GPIO, data[j]);
                 vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
             }
         }
-        }
-
-        has_synced = 1;
-
-        for(int i = 0; i < 20; i++){
-            encode_manchester_byte(data_fr, buffer[i]);
-            for(int j = 0; j < 16; j++)
-            {
-                gpio_set_level(LED_GPIO, data_fr[j]);
-                //printf("Turning on LED %d\n", data[i]);
-                vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
-            }
-        }
-        printf("\n");
+        log(INFORMATION, "Emitted full message. Resending");
+        has_user_input = 0;
+        has_synced = 0;
+        sender_state = NOT_SENDING;
     }
 }
+
+void handle_send_health()
+{
+    while (1)
+    {
+        printf("Sender;%d;%d\n", NODE_ID, sender_state);
+        printf("Receiver;%d;%d\n", NODE_ID, receiver_state);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
+}
+
+
 
 void app_main(void)
 {
     setup_adc();
     gpio_reset_pin(LED_GPIO);
     gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
-
+    log(INFORMATION, "Setup complete");
 
     xTaskCreate(handle_reading_logic, "handle_reading_logic", 4096, NULL, 5, NULL);
     xTaskCreate(handle_sending_logic, "handle_sending_logic", 4096, NULL, 5, NULL);
-
+    xTaskCreate(handle_send_health, "handle_send_health", 4096, NULL, 5, NULL);
 }
