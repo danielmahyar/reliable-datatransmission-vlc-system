@@ -26,7 +26,9 @@ const parser2 = port2.pipe(new ReadlineParser({ delimiter: '\r\n' }));
 
 
 parser.on('data', (data: string) => {
-    io.emit('node_1', parseMessageFromESP(data));
+    const message = parseMessageFromESP(data);
+    if(!message) return;
+    io.emit('node_1', message);
 })
 
 port.on("finish", () => {
@@ -39,7 +41,9 @@ port.on('close', () => {
 });
 
 parser2.on('data', (data: string) => {
-    io.emit('node_2', parseMessageFromESP(data));
+    const message = parseMessageFromESP(data);
+    if(!message) return;
+    io.emit('node_2', message);
 })
 
 port.on('end', () => {
