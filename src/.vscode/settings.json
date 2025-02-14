@@ -1,0 +1,9 @@
+{
+    "C_Cpp.intelliSenseEngine": "default",
+    "idf.espIdfPath": "/Users/danielcargarmahyar/esp/v5.2.3/esp-idf",
+    "idf.openOcdConfigs": [
+        "board/esp32c3-builtin.cfg"
+    ],
+    "idf.port": "/dev/tty.usbserial-210",
+    "idf.toolsPath": "/Users/danielcargarmahyar/.espressif"
+}
