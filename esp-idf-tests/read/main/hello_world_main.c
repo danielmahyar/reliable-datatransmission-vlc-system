@@ -15,15 +15,15 @@
 #define LED_GPIO 6
 #define ADC_CHANNEL ADC1_CHANNEL_3
 #define THRESHOLD 4000
-#define SAMPLING_RATE 200
-#define NODE_ID 2
+#define SAMPLING_RATE 300
+#define NODE_ID 1
 
 // Protocol constants
 #define MESSAGE_SIZE 20
 #define BYTE_SIZE 8
 #define BYTE_MANCHESTER_SIZE 16
 #define SYNC_BYTE 0x7E
-#define SYNC_REPEAT 10
+#define SYNC_REPEAT 30
 
 typedef enum
 {
@@ -148,18 +148,18 @@ void setup_adc()
 {
     // Configure ADC
     adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten(ADC1_CHANNEL_3, ADC_ATTEN_DB_12); // ADC1_CHANNEL_0 is GPIO2
+    adc1_config_channel_atten(ADC_CHANNEL, ADC_ATTEN_DB_12); // ADC1_CHANNEL_0 is GPIO2
 }
 
 uint16_t get_adc_reading()
 {
-    return adc1_get_raw(ADC1_CHANNEL_3);
+    return adc1_get_raw(ADC_CHANNEL);
 }
 
 uint8_t get_bit()
 {
     uint16_t adc_reading = get_adc_reading();
-    // printf("ADC reading: %d\n", adc_reading);
+    log(INFORMATION, "ADC reading: %d", adc_reading);
     return adc_reading > THRESHOLD;
 }
 
@@ -267,7 +267,7 @@ void handle_reading_logic()
     }
 }
 
-char message_buffer[MESSAGE_SIZE] = "Hello World!";
+char message_buffer[MESSAGE_SIZE] = "VLC MESSAGE :)";
 void handle_sending_logic()
 {
 
@@ -282,6 +282,15 @@ void handle_sending_logic()
     /* Print chip information */
     while (1)
     {
+        if (has_user_input == 0)
+        {
+            log(SUCCESS, "Enter message to send: ");
+            getLineInput(message_buffer, MESSAGE_SIZE);
+
+            log(SUCCESS, "Sending message: %s", message_buffer);
+
+            has_user_input = 1;
+        }
         if (has_synced == 0)
         {
             sender_state = SENDING_SYNC;
@@ -301,15 +310,6 @@ void handle_sending_logic()
             log(INFORMATION, "Done sending sync bits");
         }
 
-        if (has_user_input == 0)
-        {
-            log(SUCCESS, "Enter message to send: ");
-            // getLineInput(message_buffer, MESSAGE_SIZE);
-
-            log(SUCCESS, "Sending message: %s", message_buffer);
-
-            has_user_input = 1;
-        }
         sender_state = SENDING_MESSAGE;
         for (uint8_t i = 0; i < MESSAGE_SIZE; i++)
         {
