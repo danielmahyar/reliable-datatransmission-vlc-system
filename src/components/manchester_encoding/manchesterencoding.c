@@ -1,4 +1,4 @@
-#include "./manchesterecoding.h"
+#include "./manchesterencoding.h"
 
 /*
     Manchester Encoding
@@ -9,7 +9,7 @@
 int main()
 {
     uint8_t byte = 0xFF;
-    const uint16_t res = TIME_FUNCTION(btm(byte));
+    const uint16_t res = btm(byte);
 
     PRINT_SHORT_BINARY(res);
     printf("\n");
@@ -31,6 +31,29 @@ int main()
     return 0;
 }
 
+// Loop through and check that there is no consective 1s or 0s 3 in a row
+uint8_t is_valid_manchester(uint8_t *input)
+{
+    uint8_t last_bit = input[0];
+    uint8_t count = 1;
+    for (int i = 1; i < 16; i++)
+    {
+        if (input[i] == last_bit)
+        {
+            count++;
+        }
+        else
+        {
+            count = 1;
+        }
+        if (count == 3)
+        {
+            return 0;
+        }
+        last_bit = input[i];
+    }
+    return 1;
+}
 
 uint16_t btm(uint8_t input)
 {
@@ -64,7 +87,7 @@ uint8_t mtb(uint16_t input) {
 }
 
 
-void encode_manchester_byte(uint8_t *manchester_data, uint8_t input)
+void encode_manchester_byte(uint8_t manchester_data[8], uint8_t input)
 {
     for (int i = 0; i < 8; i++)
     {

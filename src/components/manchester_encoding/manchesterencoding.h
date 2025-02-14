@@ -4,9 +4,9 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include "../utils/binary-print.h"
-#include "../utils/timing.h"
 
-void encode_manchester_byte(uint8_t *manchester_data, uint8_t input);
+uint8_t is_valid_manchester(uint8_t *input);
+void encode_manchester_byte(uint8_t manchester_data[8], uint8_t input);
 uint8_t decode_manchester_byte(uint8_t *input);
 
 /**
