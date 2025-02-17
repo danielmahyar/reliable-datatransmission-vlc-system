@@ -1,1 +1,1 @@
-idf_component_register(SRCS "adc.c" REQUIRES driver logging)
+idf_component_register(SRCS "adc.c" REQUIRES driver logging esp_adc freertos)

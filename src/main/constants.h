@@ -11,5 +11,5 @@
 #define BYTE_SIZE 8
 #define BYTE_MANCHESTER_SIZE 16
 #define SYNC_BYTE 0x7E
-#define SYNC_REPEAT 30
+#define SYNC_REPEAT 20
 #define PING_DELAY 100

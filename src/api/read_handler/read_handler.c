@@ -6,5 +6,7 @@ void setup_read_handler(){
 }
 
 uint8_t read_env_bit(){
+    uint32_t val = read_adc();
+    log(INFORMATION, "ADC Reading: %d", val);
     return read_adc() > THRESHOLD;
 }

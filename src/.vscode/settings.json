@@ -15,6 +15,7 @@
         "esp_rom_spiflash.h": "c",
         "adc.h": "c",
         "cstdlib": "c",
-        "serial.h": "c"
+        "serial.h": "c",
+        "compare": "c"
     }
 }
