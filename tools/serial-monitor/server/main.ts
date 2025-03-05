@@ -5,16 +5,16 @@ import { Server } from 'socket.io';
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, { cors: { origin: '*' } });   
 
 // Create a port
 const port = new SerialPort({
-    path: '/dev/tty.usbserial-0283CEF2',
+    path: 'COM3',
     baudRate: 115200,
 })
 
 const port2 = new SerialPort({
-    path: '/dev/tty.usbserial-02896EF6',
+    path: 'COM4',
     baudRate: 115200,
     endOnClose: true,
 });
