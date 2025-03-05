@@ -1,11 +1,11 @@
 #include "serial.h"
 
-void get_line_input(char buf[], size_t len)
+uint8_t get_line_input(char buf[], size_t len, uint8_t* stop)
 {
     memset(buf, 0, len);
     fpurge(stdin); // clears any junk in stdin
 
-    while (1)
+    while ((*stop) == 0)
     {
         vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
 
@@ -17,7 +17,8 @@ void get_line_input(char buf[], size_t len)
             {
                 buf[length - 1] = '\0';
             }
-            break;
+            return 1;
         }
     }
+    return 0;
 }

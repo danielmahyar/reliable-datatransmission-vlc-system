@@ -1,6 +1,7 @@
 #include "light_handler.h"
 
 void setup_light_handler() {
+    log(INFORMATION, "Setting up light handler");
     setup_led();
 }
 

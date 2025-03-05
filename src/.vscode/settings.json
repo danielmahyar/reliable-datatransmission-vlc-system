@@ -2,9 +2,10 @@
     "C_Cpp.intelliSenseEngine": "default",
     "idf.espIdfPath": "/Users/danielcargarmahyar/esp/v5.2.3/esp-idf",
     "idf.openOcdConfigs": [
-        "board/esp32c3-builtin.cfg"
+        "interface/ftdi/esp32_devkitj_v1.cfg",
+        "target/esp32.cfg"
     ],
-    "idf.port": "/dev/tty.usbserial-210",
+    "idf.port": "/dev/tty.usbserial-0283CEF2",
     "idf.toolsPath": "/Users/danielcargarmahyar/.espressif",
     "idf.flashType": "UART",
     "files.associations": {
@@ -16,6 +17,13 @@
         "adc.h": "c",
         "cstdlib": "c",
         "serial.h": "c",
-        "compare": "c"
+        "compare": "c",
+        "light_handler.h": "c",
+        "led.h": "c",
+        "inttypes.h": "c",
+        "constants.h": "c"
+    },
+    "idf.customExtraVars": {
+        "IDF_TARGET": "esp32"
     }
 }

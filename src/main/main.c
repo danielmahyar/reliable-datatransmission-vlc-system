@@ -9,75 +9,158 @@
 #include "../api/light_handler/light_handler.h"
 #include "../api/serial/serial.h"
 
+/*
+ *  sync(1) -> Node 2 (assuming node 2 is not trying to send anything at the moment)
+ *  Node 2 receives sync(1)
+ *  Node 2 must first sync with sender (to get same timing)
+ *  Node 1 receives sync(1)
+ *  Node 1 sends ACK(1) -> Node 2
+ *  Node 2 receives ACK(1)
+ *  Messages can start flowing from Node 1 to Node 2
+ *
+ */
+
+typedef enum
+{
+    UNDEFINED,
+    RECEIVING,
+    SENDING
+} NodeState;
+
+NodeState node_state = UNDEFINED;
+
 ReceiverState receiver_state = NOT_SYNCED;
 SenderState sender_state = NOT_SENDING;
+
 char message_buffer[MESSAGE_SIZE] = "VLC MESSAGE :)";
+uint8_t g_synced = 0;
+uint8_t g_got_ack = 0;
+uint8_t g_is_receiving = 0;
+
+uint8_t g_sync_received = 0;
+
+uint8_t g_me_to_them_synced = 0;
+uint8_t g_them_to_me_synced = 0;
 
 void setup();
 void send_health_process();
 void sender_process();
 void receiver_process();
 
-
 void app_main(void)
 {
     setup();
     log(INFORMATION, "Setup complete");
+
 
     xTaskCreate(receiver_process, "handle_reading_logic", 4096, NULL, 5, NULL);
     xTaskCreate(sender_process, "handle_sending_logic", 4096, NULL, 5, NULL);
     xTaskCreate(send_health_process, "handle_send_health", 4096, NULL, 5, NULL);
 }
 
-void setup(){
+void setup()
+{
     setup_read_handler();
     setup_light_handler();
 }
 
-void send_health_process(){
-    while(1) {
+void send_health_process()
+{
+    while (1)
+    {
         printf("Sender;%d;%d\n", NODE_ID, sender_state);
         printf("Receiver;%d;%d\n", NODE_ID, receiver_state);
         vTaskDelay(PING_DELAY / portTICK_PERIOD_MS);
     }
 }
 
-void sender_process(){
+void sender_process()
+{
     uint8_t data[BYTE_MANCHESTER_SIZE] = {0};
-    uint8_t has_synced = 0;
     uint8_t has_user_input = 0;
 
     while (1)
     {
-        if (has_user_input == 0)
+        if (has_user_input == 0 && g_is_receiving == 0)
         {
             log(SUCCESS, "Enter message to send: ");
-            get_line_input(message_buffer, MESSAGE_SIZE);
-
+            uint8_t status = get_line_input(message_buffer, MESSAGE_SIZE, &g_is_receiving);
+            if (status == 0)
+            {
+                node_state = RECEIVING;
+                log(FAILURE, "Interrupted - Meaning I am receiving");
+                continue;
+            }
             log(SUCCESS, "Sending message: %s", message_buffer);
-
+            node_state = SENDING;
             has_user_input = 1;
         }
-        if (has_synced == 0)
-        {
-            sender_state = SENDING_SYNC;
-            log(INFORMATION, "Sending sync bits [0111110]");
-            encode_manchester_byte(data, SYNC_BYTE);
 
-            // TODO: Should wait for ACK from receiver and not use SYNC_REPEAT
-            for (int j = 0; j < SYNC_REPEAT; j++)
+        sender_state = SENDING_SYNC;
+        log(INFORMATION, "Sending sync bits [0111110]");
+
+        if (node_state == SENDING)
+        {
+            log(INFORMATION, "I AM SENDER");
+            while (g_them_to_me_synced == 0)
             {
+                uint8_t sync_mask[BYTE_MANCHESTER_SIZE] = {0};
+                encode_manchester_byte(sync_mask, SYNC_BYTE);
+                log(INFORMATION, "Sending SYNC until I SYNC or send SYNC until I receive ACK");
                 for (uint8_t i = 0; i < BYTE_MANCHESTER_SIZE; i++)
                 {
-                    set_light_state(data[i]);
+                    set_light_state(sync_mask[i]);
                     vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
                 }
             }
-            has_synced = 1;
-            log(INFORMATION, "Done sending sync bits");
+        }
+
+        if (node_state == RECEIVING)
+        {
+            log(INFORMATION, "I AM RECEIVER");
+            while (g_them_to_me_synced == 1 && g_me_to_them_synced == 0)
+            {
+                uint8_t sync_mask[BYTE_MANCHESTER_SIZE] = {0};
+                encode_manchester_byte(sync_mask, SYNC_BYTE);
+                log(INFORMATION, "Sending SYNC until I SYNC or send SYNC until I receive ACK");
+                for (uint8_t i = 0; i < BYTE_MANCHESTER_SIZE; i++)
+                {
+                    set_light_state(sync_mask[i]);
+                    vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
+                }
+            }
+        }
+
+        log(INFORMATION, "Done sending sync bits");
+
+        // Sending ACk
+        uint8_t ack_mask[BYTE_MANCHESTER_SIZE] = {0};
+        encode_manchester_byte(ack_mask, 0xD5);
+        log(INFORMATION, "Sending ACK");
+        for (uint8_t i = 0; i < BYTE_MANCHESTER_SIZE; i++)
+        {
+            set_light_state(ack_mask[i]);
+            vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
+        }
+
+        if(node_state == RECEIVING) {
+            g_is_receiving = 0; //! Only to stop node from sending data
+            continue;
         }
 
         sender_state = SENDING_MESSAGE;
+        // Length of message
+        uint8_t message_length = strlen(message_buffer);
+        log(INFORMATION, "Sending message length: %d", message_length);
+        encode_manchester_byte(data, message_length);
+        for (uint8_t j = 0; j < BYTE_MANCHESTER_SIZE; j++)
+        {
+            gpio_set_level(LED_GPIO, data[j]);
+            vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
+        }
+
+        // Message
+        log(INFORMATION, "Sending message");
         for (uint8_t i = 0; i < MESSAGE_SIZE; i++)
         {
             encode_manchester_byte(data, message_buffer[i]);
@@ -90,18 +173,22 @@ void sender_process(){
         }
         log(INFORMATION, "Emitted full message. Resending");
         has_user_input = 0;
-        has_synced = 0;
         sender_state = NOT_SENDING;
+        g_is_receiving = 0;
+        g_got_ack = 0;
     }
 }
 
-void receiver_process(){
-    char message_from_sender[MESSAGE_SIZE] = {0};
+void receiver_process()
+{
+    char message_from_sender[100] = {0};
     int message_index = 0;
 
     uint8_t manchester_encoded[BYTE_MANCHESTER_SIZE] = {0};
 
     uint8_t has_synced = 0;
+    uint8_t first_byte = 0;
+    uint8_t message_size = 0;
 
     while (1)
     {
@@ -120,7 +207,7 @@ void receiver_process(){
         }
         log(INFORMATION, "Decoded byte: %d - Binary: %d%d%d%d%d%d%d%d", decoded_byte, binary[7], binary[6], binary[5], binary[4], binary[3], binary[2], binary[1], binary[0]);
 
-        if (has_synced == 0)
+        if (g_them_to_me_synced == 0)
         {
             receiver_state = TRYING_TO_SYNC;
             if (decoded_byte != 0x7E)
@@ -175,25 +262,50 @@ void receiver_process(){
                 log(SUCCESS, "SYNCED");
                 receiver_state = SYNCED;
                 has_synced = 1;
+                g_synced = 1;
+                g_is_receiving = 1;
+                g_sync_received = 1;
+                g_them_to_me_synced = 1;
             }
         }
 
         log(INFORMATION, "Decoded byte: %u", decoded_byte);
 
-        if (decoded_byte != 0x7E)
+        if (decoded_byte == 0xD5 && g_me_to_them_synced == 0)
         {
-            // Assume message is being send
-            message_from_sender[message_index] = decoded_byte;
-            log(INFORMATION, "Got char: %c. I expect %d characters more", decoded_byte, MESSAGE_SIZE - message_index);
-            message_index++;
+            g_got_ack = 1;
+            g_me_to_them_synced = 1;
+            log(SUCCESS, "Got ACK");
+            continue;
         }
 
-        if (message_index == MESSAGE_SIZE)
+        if (g_me_to_them_synced == 0)
+        {
+            log(WARNING, "Waiting for ACK");
+            continue;
+        }
+
+        // Assume message is being send
+
+        if(first_byte == 0) {
+            log(INFORMATION, "Expecting message size");
+            first_byte = 1;
+            message_index = 0;
+            message_size = decoded_byte;
+            memset(message_from_sender, 0, MESSAGE_SIZE);
+        }
+
+        message_from_sender[message_index] = decoded_byte;
+        log(INFORMATION, "Got char: %c. I expect %d characters more", decoded_byte, MESSAGE_SIZE - message_index);
+        message_index++;
+
+        if (message_index == message_size + 1)
         {
             log(SUCCESS, "Message received: %s", message_from_sender);
             message_index = 0;
             has_synced = 0;
         }
+
         memset(manchester_encoded, 0, 16);
     }
 }

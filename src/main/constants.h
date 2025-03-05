@@ -1,10 +1,10 @@
 #pragma once
 
 // Hardware constants
-#define LED_GPIO 6
+#define LED_GPIO 12
 #define THRESHOLD 4000
 #define SAMPLING_RATE 300
-#define NODE_ID 2
+#define NODE_ID 1
 
 // Protocol constants
 #define MESSAGE_SIZE 20

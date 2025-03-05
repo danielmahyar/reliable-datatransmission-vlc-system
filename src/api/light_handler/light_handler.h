@@ -1,5 +1,6 @@
 #pragma once
 #include <inttypes.h>
+#include "../../components/logging/logging.h"
 #include "../../hal/led/led.h"
 
 void setup_light_handler();

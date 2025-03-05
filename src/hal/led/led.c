@@ -1,7 +1,8 @@
 #include "led.h"
 
 void setup_led(){
-    gpio_reset_pin(LED_GPIO);
+    gpio_reset_pin(LED_GPIO);    
+    log(INFORMATION, "Setting up LED");
     gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
 }
 

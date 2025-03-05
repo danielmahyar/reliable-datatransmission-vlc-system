@@ -4,4 +4,4 @@
 #include "freertos/FreeRTOS.h"
 #include "../../main/constants.h"
 
-void get_line_input(char* buf, size_t len);
+uint8_t get_line_input(char* buf, size_t len, uint8_t* stop);
