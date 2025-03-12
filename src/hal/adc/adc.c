@@ -140,22 +140,26 @@ static adc_oneshot_unit_handle_t adc1_handle;
 
 void setup_adc()
 {
-    adc_oneshot_unit_init_cfg_t init_config1 = {
+    /*adc_oneshot_unit_init_cfg_t init_config1 = {
         .unit_id = ADC_UNIT_1,
         .ulp_mode = ADC_ULP_MODE_DISABLE,
     };
     ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config1, &adc1_handle));
 
     adc_oneshot_chan_cfg_t config = {
-        .atten = ADC_ATTEN_DB_12,
-        .bitwidth = ADC_BITWIDTH_DEFAULT,
+        .atten = ADC_ATTEN_DB_0,
+        .bitwidth = ADC_BITWIDTH_12,
     };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC_CHANNEL_5, &config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC_CHANNEL_5, &config));*/
+
+    adc1_config_width(ADC_BITWIDTH_12);
+    adc1_config_channel_atten(ADC_CHANNEL_5,ADC_ATTEN_DB_0);
 }
 
 uint32_t read_adc()
 {
-    int adc_raw = 0;
-    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ADC_CHANNEL_5, &adc_raw));
-    return adc_raw;
+    uint32_t adc_reading = adc1_get_raw(ADC_CHANNEL_5);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+    uint32_t adc_reading1 = adc1_get_raw(ADC_CHANNEL_5);
+    return adc_reading > adc_reading1 ? adc_reading : adc_reading1;
 }

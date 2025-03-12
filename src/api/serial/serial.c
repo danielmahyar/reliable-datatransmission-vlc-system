@@ -7,7 +7,7 @@ uint8_t get_line_input(char buf[], size_t len, uint8_t* stop)
 
     while ((*stop) == 0)
     {
-        vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
 
         if (fgets(buf, len, stdin) != NULL)
         {

@@ -40,7 +40,9 @@ function App() {
         } else if (data.type === "SENDER") {
           setNodeOneSenderState(data.message);
         } else {
-          setNodeOneMessages((prev) => [data, ...prev]);
+          // Only make sure that latest 20 messages are saved
+          setNodeOneMessages((prev) => [data, ...prev.slice(0, 40)]);
+
         }
       });
 
@@ -52,7 +54,7 @@ function App() {
         else if (data.type === "SENDER") {
           setNodeTwoSenderState(data.message);
         } else {
-          setNodeTwoMessages((prev) => [data, ...prev]);
+          setNodeTwoMessages((prev) => [data, ...prev.slice(0, 40)]);
         }
       });
       setConnected(true);

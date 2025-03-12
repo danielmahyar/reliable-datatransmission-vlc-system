@@ -21,7 +21,8 @@
         "light_handler.h": "c",
         "led.h": "c",
         "inttypes.h": "c",
-        "constants.h": "c"
+        "constants.h": "c",
+        "uart.h": "c"
     },
     "idf.customExtraVars": {
         "IDF_TARGET": "esp32"

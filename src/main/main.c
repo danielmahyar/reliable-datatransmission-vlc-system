@@ -8,6 +8,12 @@
 #include "../api/read_handler/read_handler.h"
 #include "../api/light_handler/light_handler.h"
 #include "../api/serial/serial.h"
+#include "driver/uart.h"
+
+#define UART_NUM        UART_NUM_0   // Use UART1
+#define TXD_PIN         (GPIO_NUM_17) 
+#define RXD_PIN         (GPIO_NUM_16)
+#define BUF_SIZE        (1024)
 
 /*
  *  sync(1) -> Node 2 (assuming node 2 is not trying to send anything at the moment)
@@ -52,6 +58,21 @@ void app_main(void)
     setup();
     log(INFORMATION, "Setup complete");
 
+    
+
+    while (1) {
+        const uint8_t flag = 0x7EEE;
+        uint8_t data[BUF_SIZE];
+        uint32_t len = uart_read_bytes(UART_NUM, data, BUF_SIZE, 100 / portTICK_PERIOD_MS);
+        if (len > 0) {
+            // Echo the received data back
+            set_led(1);
+            // log(INFORMATION, "Received %d bytes", len);
+            uart_write_bytes(UART_NUM, (const char*) data, len);
+        }
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+        set_led(0);
+    }
 
     xTaskCreate(receiver_process, "handle_reading_logic", 4096, NULL, 5, NULL);
     xTaskCreate(sender_process, "handle_sending_logic", 4096, NULL, 5, NULL);
@@ -60,6 +81,21 @@ void app_main(void)
 
 void setup()
 {
+        // Configure UART parameters
+        uart_config_t uart_config = {
+            .baud_rate = 115200,
+            .data_bits = UART_DATA_8_BITS,
+            .parity = UART_PARITY_DISABLE,
+            .stop_bits = UART_STOP_BITS_1,
+            .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+            .source_clk = UART_SCLK_APB,
+        };
+    
+        // Install UART driver
+        ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
+        ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
+        uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0);
+
     setup_read_handler();
     setup_light_handler();
 }
@@ -110,7 +146,7 @@ void sender_process()
                 for (uint8_t i = 0; i < BYTE_MANCHESTER_SIZE; i++)
                 {
                     set_light_state(sync_mask[i]);
-                    vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
+                    vTaskDelay((SAMPLING_RATE + 10) / portTICK_PERIOD_MS);
                 }
             }
         }
@@ -126,7 +162,7 @@ void sender_process()
                 for (uint8_t i = 0; i < BYTE_MANCHESTER_SIZE; i++)
                 {
                     set_light_state(sync_mask[i]);
-                    vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
+                    vTaskDelay((SAMPLING_RATE + 10) / portTICK_PERIOD_MS);
                 }
             }
         }
@@ -140,9 +176,9 @@ void sender_process()
         for (uint8_t i = 0; i < BYTE_MANCHESTER_SIZE; i++)
         {
             set_light_state(ack_mask[i]);
-            vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
+            vTaskDelay((SAMPLING_RATE + 10) / portTICK_PERIOD_MS);
         }
-
+        
         if(node_state == RECEIVING) {
             g_is_receiving = 0; //! Only to stop node from sending data
             continue;
@@ -156,7 +192,7 @@ void sender_process()
         for (uint8_t j = 0; j < BYTE_MANCHESTER_SIZE; j++)
         {
             gpio_set_level(LED_GPIO, data[j]);
-            vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
+            vTaskDelay((SAMPLING_RATE + 10) / portTICK_PERIOD_MS);
         }
 
         // Message
@@ -168,7 +204,7 @@ void sender_process()
             for (uint8_t j = 0; j < BYTE_MANCHESTER_SIZE; j++)
             {
                 gpio_set_level(LED_GPIO, data[j]);
-                vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
+                vTaskDelay((SAMPLING_RATE + 10) / portTICK_PERIOD_MS);
             }
         }
         log(INFORMATION, "Emitted full message. Resending");
@@ -217,8 +253,8 @@ void receiver_process()
 
                 if (is_valid == 0)
                 {
-                    log(INFORMATION, "Waiting for 25 ms");
-                    vTaskDelay(25 / portTICK_PERIOD_MS);
+                    log(INFORMATION, "Waiting for 5 ms");
+                    vTaskDelay(10 / portTICK_PERIOD_MS);
                 }
                 else
                 {
