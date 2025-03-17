@@ -9,22 +9,20 @@
 #include "../api/light_handler/light_handler.h"
 #include "../api/serial/serial.h"
 #include "driver/uart.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
 
 #define UART_NUM UART_NUM_0 // Use UART1
-#define TXD_PIN (GPIO_NUM_17)
-#define RXD_PIN (GPIO_NUM_16)
 #define BUF_SIZE (1024)
+#define SHARED_ARRAY_SIZE 100
+#define BUFFER_SIZE 1024
 
-/*
- *  sync(1) -> Node 2 (assuming node 2 is not trying to send anything at the moment)
- *  Node 2 receives sync(1)
- *  Node 2 must first sync with sender (to get same timing)
- *  Node 1 receives sync(1)
- *  Node 1 sends ACK(1) -> Node 2
- *  Node 2 receives ACK(1)
- *  Messages can start flowing from Node 1 to Node 2
- *
- */
+SemaphoreHandle_t xMutex;
+char shared_array[SHARED_ARRAY_SIZE];
+char shared_char = 0;
+char uart_buffer[BUFFER_SIZE];
+int buffer_index = 0;
+
 
 typedef enum
 {
@@ -39,24 +37,24 @@ ReceiverState receiver_state = NOT_SYNCED;
 SenderState sender_state = NOT_SENDING;
 
 char message_buffer[MESSAGE_SIZE] = "VLC MESSAGE :)";
-uint8_t g_synced = 0;
-uint8_t g_got_ack = 0;
-uint8_t g_is_receiving = 0;
-
-uint8_t g_sync_received = 0;
-
-uint8_t g_me_to_them_synced = 0;
-uint8_t g_them_to_me_synced = 0;
 
 void setup();
 void send_health_process();
-void sender_process();
 void receiver_process();
+void reader_process();
 
 void app_main(void)
 {
     setup();
     log(INFORMATION, "Setup complete");
+
+    xMutex = xSemaphoreCreateMutex();
+    if (xMutex == NULL) {
+        log(FAILURE, "Failed to create mutex");
+        return;
+    }
+
+    // xTaskCreatePinnedToCore(reader_process, "reader_process", 4096, NULL, 5, NULL, 1);
 
     uint8_t manchester_encoded[BYTE_MANCHESTER_SIZE] = {0};
 /*
@@ -74,25 +72,25 @@ void app_main(void)
             set_led(0);
         } */
     xTaskCreatePinnedToCore(receiver_process, "handle_reading_logic", 4096, NULL, 5, NULL, 0);
-    /* xTaskCreatePinnedToCore(send_health_process, "handle_send_health", 4096, NULL, 5, NULL, 1); */
+    // xTaskCreatePinnedToCore(send_health_process, "handle_send_health", 4096, NULL, 5, NULL, 1);
 }
 
 void setup()
 {
-    /*         // Configure UART parameters
-            uart_config_t uart_config = {
-                .baud_rate = 115200,
-                .data_bits = UART_DATA_8_BITS,
-                .parity = UART_PARITY_DISABLE,
-                .stop_bits = UART_STOP_BITS_1,
-                .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-                .source_clk = UART_SCLK_APB,
-            };
+    // Configure UART parameters
+    uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_APB,
+    };
 
-            // Install UART driver
-            ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
-            ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
-            uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0); */
+    // Install UART driver
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
+    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
+    uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0);
 
     setup_read_handler();
     setup_light_handler();
@@ -125,10 +123,8 @@ void receiver_process()
         for (int i = 0; i < BYTE_MANCHESTER_SIZE; i++)
         {
             manchester_encoded[i] = read_env_bit();
-            printf("%d", manchester_encoded[i]);
             vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
         }
-        printf("\n");
 
         uint8_t decoded_byte = decode_manchester_byte(manchester_encoded);
         // print binary representation of decoded byte
@@ -139,18 +135,31 @@ void receiver_process()
         }
         log(INFORMATION, "Decoded byte: %d - Binary: %d%d%d%d%d%d%d%d", decoded_byte, binary[7], binary[6], binary[5], binary[4], binary[3], binary[2], binary[1], binary[0]);
         if(has_synced == 1)  {
-            log(INFORMATION, "Synced");
+            if (decoded_byte == 0x7E) {
+                // Send buffer over UART
+                uart_write_bytes(UART_NUM, uart_buffer, buffer_index);
+                buffer_index = 0; // Reset buffer index
+                memset(uart_buffer, 0, BUFFER_SIZE); // Clear buffer
+            } else {
+                // Add decoded byte to buffer
+                if (buffer_index < BUFFER_SIZE) {
+                    uart_buffer[buffer_index] = decoded_byte;
+                    buffer_index++;
+                } else {
+                    log(WARNING, "Buffer overflow");
+                }
+            }
             continue;
         }
         if (decoded_byte != SYNC_BYTE)
         {
             uint8_t is_valid = is_valid_manchester(manchester_encoded);
-            log(WARNING, "Not synced - %s valid manchester", is_valid ? "is" : "is not");
+            // log(WARNING, "Not synced - %s valid manchester", is_valid ? "is" : "is not");
 
             if (is_valid == 0)
             {
-                log(INFORMATION, "Waiting for 25 ms");
-                vTaskDelay(25 / portTICK_PERIOD_MS);
+                // log(INFORMATION, "Waiting for 25 ms");
+                vTaskDelay(OFFSET_DELAY / portTICK_PERIOD_MS);
             }
             else
             {
@@ -196,7 +205,7 @@ void receiver_process()
             
         }
 
-        log(INFORMATION, "Decoded byte: %u", decoded_byte);
+
 
 /*         // Assume message is being send
         if (first_byte == 0)
@@ -219,5 +228,24 @@ void receiver_process()
             has_synced = 0;
         } */
 
+    }
+}
+
+
+void reader_process()
+{
+    while (1)
+    {
+        while (xSemaphoreTake(xMutex, 0) != pdTRUE)
+        {
+            // Spinlock: wait until the mutex is available
+            taskYIELD();
+        }
+
+        // Read from shared_array
+        log(INFORMATION, "Reader read: %d", shared_char);
+        uart_write_bytes(UART_NUM, &shared_char, 1);
+        xSemaphoreGive(xMutex);
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }

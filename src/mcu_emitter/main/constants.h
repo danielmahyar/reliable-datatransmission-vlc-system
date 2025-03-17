@@ -2,7 +2,7 @@
 
 // Hardware constants
 #define LED_GPIO 12
-#define SAMPLING_RATE 200
+#define SAMPLING_RATE 10
 #define NODE_ID 1
 
 // Protocol constants

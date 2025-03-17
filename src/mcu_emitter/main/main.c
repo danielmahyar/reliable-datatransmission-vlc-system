@@ -9,6 +9,10 @@
 #include "../api/light_handler/light_handler.h"
 #include "../api/serial/serial.h"
 #include "driver/uart.h"
+#include "rom/ets_sys.h"
+#include "esp_task_wdt.h"
+#include "esp_timer.h"
+
 
 #define UART_NUM UART_NUM_0 // Use UART1
 #define TXD_PIN (GPIO_NUM_17)
@@ -35,50 +39,44 @@ typedef enum
 
 NodeState node_state = UNDEFINED;
 
-ReceiverState receiver_state = NOT_SYNCED;
-SenderState sender_state = NOT_SENDING;
-
 char message_buffer[MESSAGE_SIZE] = "VLC MESSAGE :)";
-uint8_t g_synced = 0;
-uint8_t g_got_ack = 0;
-uint8_t g_is_receiving = 0;
+char received_message_buffer[1024] = {0};
+uint32_t received_message_length = 0;
+const uint8_t ACK_BYTE = 0x7E;
 
-uint8_t g_sync_received = 0;
-
-uint8_t g_me_to_them_synced = 0;
-uint8_t g_them_to_me_synced = 0;
+SemaphoreHandle_t xMutexBuffer;
+SemaphoreHandle_t xMutexLength;
 
 void setup();
 void send_health_process();
 void sender_process();
-void receiver_process();
+void read_process();
+
 
 void app_main(void)
 {
+
+    
     setup();
     log(INFORMATION, "Setup complete");
 
-    /*     while (1) {
-            const uint8_t flag = 0x7EEE;
-            uint8_t data[BUF_SIZE];
-            uint32_t len = uart_read_bytes(UART_NUM, data, BUF_SIZE, 100 / portTICK_PERIOD_MS);
-            if (len > 0) {
-                // Echo the received data back
-                set_led(1);
-                // log(INFORMATION, "Received %d bytes", len);
-                uart_write_bytes(UART_NUM, (const char*) data, len);
-            }
-            vTaskDelay(10 / portTICK_PERIOD_MS);
-            set_led(0);
-        } */
+    xMutexBuffer = xSemaphoreCreateMutex();
+    xMutexLength = xSemaphoreCreateMutex();
+    if (xMutexBuffer == NULL || xMutexLength == NULL)
+    {
+        log(FAILURE, "Mutex creation failed");
+        return;
+    }
+
     xTaskCreatePinnedToCore(sender_process, "handle_sending_logic", 4096, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(read_process, "handle_reading_logic", 4096, NULL, 5, NULL, 1);
 /*     xTaskCreatePinnedToCore(send_health_process, "handle_send_health", 4096, NULL, 5, NULL, 1);
  */}
 
 void setup()
 {
     // Configure UART parameters
-/*     uart_config_t uart_config = {
+    uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
@@ -90,7 +88,7 @@ void setup()
     // Install UART driver
     ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
     ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
-    uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0); */
+    uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0);
 
     setup_read_handler();
     setup_light_handler();
@@ -100,47 +98,76 @@ void send_health_process()
 {
     while (1)
     {
-        printf("Sender;%d;%d\n", NODE_ID, sender_state);
-        printf("Receiver;%d;%d\n", NODE_ID, receiver_state);
         vTaskDelay(PING_DELAY / portTICK_PERIOD_MS);
     }
 }
 
-void sender_process()
+void sender_process(void *param)
 {
+
     uint8_t data[BYTE_MANCHESTER_SIZE] = {0};
 
-    encode_manchester_byte(data, SYNC_BYTE);
     // Send sync continuously
     while (1)
     {
+        xSemaphoreTake(xMutexLength, portMAX_DELAY);
+        uint32_t length = received_message_length;
+        xSemaphoreGive(xMutexLength);
 
-        for (uint8_t j = 0; j < BYTE_MANCHESTER_SIZE; j++)
+        log(INFORMATION, "Received message length is %d", length);
+        if (length > 0)
         {
-            printf("%d", data[j]);
-            set_light_state(data[j]);
-            vTaskDelay((SAMPLING_RATE) / portTICK_PERIOD_MS);
+            for (uint8_t i = 0; i < length; i++)
+            {
+                xSemaphoreTake(xMutexBuffer, portMAX_DELAY);
+                char byte = received_message_buffer[i];
+                xSemaphoreGive(xMutexBuffer);
+
+                encode_manchester_byte(data, byte);
+                // Send received message to the light
+                log(SUCCESS, "Sending message: %d", byte);
+                for (uint8_t j = 0; j < BYTE_MANCHESTER_SIZE; j++)
+                {
+                    set_light_state(data[j]);
+                    vTaskDelay((SAMPLING_RATE) / portTICK_PERIOD_MS);
+                }
+            }
+
+            xSemaphoreTake(xMutexLength, portMAX_DELAY);
+            received_message_length = 0;
+            xSemaphoreGive(xMutexLength);
+            log(SUCCESS, "ACK");
         }
-        printf("\n");
-    }
-
-    while (1)
-    {
-        log(SUCCESS, "Enter message to send: ");
-        // uint8_t status = get_line_input(message_buffer, MESSAGE_SIZE, &g_is_receiving);
-        log(SUCCESS, "Sending message: %s", message_buffer);
-
-
-        for (uint8_t i = 0; i < MESSAGE_SIZE; i++)
+        else
         {
-            encode_manchester_byte(data, message_buffer[i]);
-            log(INFORMATION, "Sending character: %c (%d)", message_buffer[i], message_buffer[i]);
+            encode_manchester_byte(data, SYNC_BYTE);
             for (uint8_t j = 0; j < BYTE_MANCHESTER_SIZE; j++)
             {
+                // printf("%d", data[j]);
                 set_light_state(data[j]);
                 vTaskDelay((SAMPLING_RATE) / portTICK_PERIOD_MS);
             }
+            printf("\n");
         }
+    }
+}
 
+void read_process(void *param)
+{
+    // Read from uart
+    while (1)
+    {
+
+        uint32_t len = uart_read_bytes(UART_NUM, received_message_buffer, BUF_SIZE, 100 / portTICK_PERIOD_MS);
+        if (len > 0)
+        {
+            xSemaphoreTake(xMutexBuffer, portMAX_DELAY);
+            xSemaphoreTake(xMutexLength, portMAX_DELAY);
+            received_message_length = len;
+            xSemaphoreGive(xMutexLength);
+            xSemaphoreGive(xMutexBuffer);
+
+            log(SUCCESS, "Received %d bytes", len);
+        }
     }
 }

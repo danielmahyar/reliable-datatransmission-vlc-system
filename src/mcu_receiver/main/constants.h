@@ -2,8 +2,9 @@
 
 // Hardware constants
 #define LED_GPIO 12
-#define THRESHOLD 4000
-#define SAMPLING_RATE 200
+#define THRESHOLD 800
+#define SAMPLING_RATE 10
+#define OFFSET_DELAY 9
 #define NODE_ID 2
 
 // Protocol constants

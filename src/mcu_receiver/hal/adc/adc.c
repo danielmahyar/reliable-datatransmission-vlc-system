@@ -154,11 +154,13 @@ void setup_adc()
 
     adc1_config_width(ADC_BITWIDTH_12);
     adc1_config_channel_atten(ADC_CHANNEL_5,ADC_ATTEN_DB_0);
+    adc1_config_channel_atten(ADC_CHANNEL_4,ADC_ATTEN_DB_0);
 }
 
 uint32_t read_adc()
 {
-    uint32_t adc_reading = adc1_get_raw(ADC_CHANNEL_5);
+    uint32_t adc_reading = adc1_get_raw(ADC_CHANNEL_4);
+    // printf("ADC Reading: %lu\n", adc_reading);
 
     return  adc_reading ;
 }
