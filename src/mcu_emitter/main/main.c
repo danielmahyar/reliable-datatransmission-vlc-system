@@ -10,8 +10,8 @@
 #include "../api/serial/serial.h"
 #include "driver/uart.h"
 #include "rom/ets_sys.h"
-#include "esp_task_wdt.h"
 #include "esp_timer.h"
+#include "esp_task_wdt.h"
 
 
 #define UART_NUM UART_NUM_0 // Use UART1
@@ -47,6 +47,20 @@ const uint8_t ACK_BYTE = 0x7E;
 SemaphoreHandle_t xMutexBuffer;
 SemaphoreHandle_t xMutexLength;
 
+esp_timer_handle_t periodic_timer;
+
+uint8_t buffer_index = 0;
+uint8_t buffer[] = {1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0};
+void IRAM_ATTR timer_isr(void* arg)
+{
+    set_light_state(buffer[buffer_index]);
+    buffer_index++;
+    if (buffer_index == 16)
+    {
+        buffer_index = 0;
+    }
+}
+
 void setup();
 void send_health_process();
 void sender_process();
@@ -55,7 +69,7 @@ void read_process();
 
 void app_main(void)
 {
-
+    esp_task_wdt_deinit();
     
     setup();
     log(INFORMATION, "Setup complete");
@@ -68,7 +82,20 @@ void app_main(void)
         return;
     }
 
-    xTaskCreatePinnedToCore(sender_process, "handle_sending_logic", 4096, NULL, 5, NULL, 0);
+    // Create and start the periodic timer
+    const esp_timer_create_args_t periodic_timer_args = {
+        .callback = &timer_isr,
+        .name = "periodic_timer",
+
+        
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 1000)); // 50 microseconds
+
+    while(1){
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+    // xTaskCreatePinnedToCore(sender_process, "handle_sending_logic", 4096, NULL, 5, NULL, 0);
     xTaskCreatePinnedToCore(read_process, "handle_reading_logic", 4096, NULL, 5, NULL, 1);
 /*     xTaskCreatePinnedToCore(send_health_process, "handle_send_health", 4096, NULL, 5, NULL, 1);
  */}

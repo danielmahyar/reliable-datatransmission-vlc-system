@@ -160,7 +160,6 @@ void setup_adc()
 uint32_t read_adc()
 {
     uint32_t adc_reading = adc1_get_raw(ADC_CHANNEL_4);
-    // printf("ADC Reading: %lu\n", adc_reading);
-
+    // printf("ADC Reading: %lu\n", adc_reading); 
     return  adc_reading ;
 }

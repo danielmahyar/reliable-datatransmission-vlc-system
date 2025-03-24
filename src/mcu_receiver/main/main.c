@@ -11,18 +11,15 @@
 #include "driver/uart.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "esp_timer.h"
+#include "esp_task_wdt.h"
+#include "esp_timer.h" // Include for timestamp functionality
 
 #define UART_NUM UART_NUM_0 // Use UART1
 #define BUF_SIZE (1024)
 #define SHARED_ARRAY_SIZE 100
 #define BUFFER_SIZE 1024
-
-SemaphoreHandle_t xMutex;
-char shared_array[SHARED_ARRAY_SIZE];
-char shared_char = 0;
-char uart_buffer[BUFFER_SIZE];
-int buffer_index = 0;
-
+#define MAX_SPACING 3 // Maximum spacing allowed between bits in "01" or "10" patterns
 
 typedef enum
 {
@@ -36,43 +33,274 @@ NodeState node_state = UNDEFINED;
 ReceiverState receiver_state = NOT_SYNCED;
 SenderState sender_state = NOT_SENDING;
 
-char message_buffer[MESSAGE_SIZE] = "VLC MESSAGE :)";
+esp_timer_handle_t periodic_timer;
 
 void setup();
 void send_health_process();
-void receiver_process();
-void reader_process();
+void isr_process();
+
+uint8_t bit_count = 0;
+uint8_t temp_buffer[16] = {0}; // Adjusted size to 8
+uint8_t last_bit = 0xFF;       // Initialize to an invalid value
+uint8_t spacing_count = 0;
+
+uint8_t bit_read_count = 0;
+
+uint8_t stable_bit = 0xFF; // Current stable bit being tracked
+uint8_t stable_count = 0;  // Count of consecutive identical bits
+
+uint64_t last_valid_bit_time = 0; // Timestamp of the last valid bit
+uint64_t current_time = 0;        // Current timestamp
+float bitrate = 0;                // Calculated bitrate
+
+typedef enum
+{
+    STATE_START,
+    STATE_1,
+    STATE_10,
+    STATE_100,
+    STATE_1001,
+    STATE_10010,
+    STATE_100101,
+    STATE_1001010,
+    STATE_10010101,
+    STATE_100101010,
+    STATE_1001010101,
+    STATE_10010101010,
+    STATE_100101010101,
+    STATE_1001010101010,
+    STATE_10010101010101,
+    STATE_100101010101011,
+    STATE_1001010101010110,
+    STATE_END
+} FSAState;
+
+FSAState fsa_state = STATE_START;
+
+void reset_fsa()
+{
+    fsa_state = STATE_START;
+    bit_count = 0;
+    memset(temp_buffer, 0, 16);
+    stable_bit = 0xFF;
+    stable_count = 0;
+    spacing_count = 0;
+    last_bit = 0xFF;
+    printf("\n");
+}
+
+void process_fsa(uint8_t bit)
+{
+    switch (fsa_state)
+    {
+    case STATE_START:
+        if (bit == 1)
+            fsa_state = STATE_1;
+        break;
+    case STATE_1:
+        if (bit == 0)
+            fsa_state = STATE_10;
+        else
+            reset_fsa();
+        break;
+    case STATE_10:
+        if (bit == 0)
+            fsa_state = STATE_100;
+        else
+            reset_fsa();
+        break;
+    case STATE_100:
+        if (bit == 1)
+            fsa_state = STATE_1001;
+        else
+            reset_fsa();
+        break;
+    case STATE_1001:
+        if (bit == 0)
+            fsa_state = STATE_10010;
+        else
+            reset_fsa();
+        break;
+    case STATE_10010:
+        if (bit == 1)
+            fsa_state = STATE_100101;
+        else
+            reset_fsa();
+        break;
+    case STATE_100101:
+        if (bit == 0)
+            fsa_state = STATE_1001010;
+        else
+            reset_fsa();
+        break;
+    case STATE_1001010:
+        if (bit == 1)
+            fsa_state = STATE_10010101;
+        else
+            reset_fsa();
+        break;
+    case STATE_10010101:
+        if (bit == 0)
+            fsa_state = STATE_100101010;
+        else
+            reset_fsa();
+        break;
+    case STATE_100101010:
+        if (bit == 1)
+            fsa_state = STATE_1001010101;
+        else
+            reset_fsa();
+        break;
+    case STATE_1001010101:
+        if (bit == 0)
+            fsa_state = STATE_10010101010;
+        else
+            reset_fsa();
+        break;
+    case STATE_10010101010:
+        if (bit == 1)
+            fsa_state = STATE_100101010101;
+        else
+            reset_fsa();
+        break;
+    case STATE_100101010101:
+        if (bit == 0)
+            fsa_state = STATE_1001010101010;
+        else
+            reset_fsa();
+        break;
+    case STATE_1001010101010:
+        if (bit == 1)
+            fsa_state = STATE_10010101010101;
+        else
+            reset_fsa();
+        break;
+    case STATE_10010101010101:
+        if (bit == 1)
+            fsa_state = STATE_100101010101011;
+        else
+            reset_fsa();
+        break;
+
+    case STATE_100101010101011:
+        if (bit == 0)
+            fsa_state = STATE_1001010101010110;
+        else
+            reset_fsa();
+        break;
+    case STATE_1001010101010110:
+        fsa_state = STATE_END;
+        break;
+    case STATE_END:
+        // Already in the end state, do nothing
+        break;
+    }
+}
+
+QueueHandle_t timer_data_queue; // Queue to transfer data from ISR to thread
+
+void timer_data_process()
+{
+    uint8_t received_bit;
+    while (1)
+    {
+        // Wait for data from the queue
+        if (xQueueReceive(timer_data_queue, &received_bit, portMAX_DELAY))
+        {
+            // Process the received bit
+            printf("Processing bit: %d\n", received_bit);
+            // Add further processing logic here if needed
+        }
+    }
+}
+
+void IRAM_ATTR timer_isr(void *arg)
+{
+    uint8_t current_bit = read_env_bit();
+
+    // Send the bit to the queue
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xQueueSendFromISR(timer_data_queue, &current_bit, &xHigherPriorityTaskWoken);
+
+
+    // uint8_t current_bit = read_env_bit();
+
+    /*     printf("%d", current_bit);
+        bit_read_count++;
+        if (bit_read_count == 16)
+        {
+            printf("\n");
+            bit_read_count = 0;
+        } */
+    
+        // Check if the current bit matches the stable bit
+        /* if (current_bit == stable_bit)
+        {
+            stable_count++;
+        }
+        else
+        {
+            // If the bit changes, reset the stable count
+            stable_bit = current_bit;
+            stable_count = 1;
+        }
+    
+        // If the stable count reaches the threshold (3 readings), process the bit
+        if (stable_count >= 3)
+        {
+            // Process the bit through the FSA
+            process_fsa(current_bit);
+    
+            // Only add the bit to the buffer if it follows the FSA
+            if (fsa_state != STATE_START && fsa_state != STATE_END)
+            {
+                printf("%d", current_bit);
+                temp_buffer[bit_count] = stable_bit;
+                bit_count++;
+            } 
+    
+            
+    
+            // Check if the FSA reached the end state
+            if (fsa_state == STATE_END)
+            {
+                // log(SUCCESS, "Pattern 100101010101010110 detected!");
+    
+                reset_fsa(); // Reset the FSA for the next detection
+            }
+    
+            stable_count = 0; // Reset stable count for the next bit
+        }
+    
+        // Process when 16 bits are collected
+        if (bit_count == 16)
+        {
+            uint8_t decoded_byte = decode_manchester_byte(temp_buffer);
+            printf("\n");
+            bit_count = 0;
+            memset(temp_buffer, 0, 16);
+        } */
+}
 
 void app_main(void)
 {
+    esp_task_wdt_deinit();
+
     setup();
+
     log(INFORMATION, "Setup complete");
 
-    xMutex = xSemaphoreCreateMutex();
-    if (xMutex == NULL) {
-        log(FAILURE, "Failed to create mutex");
+    // Create the queue for transferring data from ISR
+    timer_data_queue = xQueueCreate(1000, sizeof(uint8_t));
+    if (timer_data_queue == NULL)
+    {
+        log(FAILURE, "Failed to create queue");
         return;
     }
 
-    // xTaskCreatePinnedToCore(reader_process, "reader_process", 4096, NULL, 5, NULL, 1);
-
-    uint8_t manchester_encoded[BYTE_MANCHESTER_SIZE] = {0};
-/*
-         while (1) {
-            const uint8_t flag = 0x7EEE;
-            uint8_t data[BUF_SIZE];
-            uint32_t len = uart_read_bytes(UART_NUM, data, BUF_SIZE, 100 / portTICK_PERIOD_MS);
-            if (len > 0) {
-                // Echo the received data back
-                set_led(1);
-                // log(INFORMATION, "Received %d bytes", len);
-                uart_write_bytes(UART_NUM, (const char*) data, len);
-            }
-            vTaskDelay(10 / portTICK_PERIOD_MS);
-            set_led(0);
-        } */
-    xTaskCreatePinnedToCore(receiver_process, "handle_reading_logic", 4096, NULL, 5, NULL, 0);
-    // xTaskCreatePinnedToCore(send_health_process, "handle_send_health", 4096, NULL, 5, NULL, 1);
+    // Create tasks on separate cores
+    xTaskCreatePinnedToCore(isr_process, "handle_reading_logic", 4096, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(timer_data_process, "timer_data_process", 4096, NULL, 5, NULL, 1);
 }
 
 void setup()
@@ -106,6 +334,25 @@ void send_health_process()
     }
 }
 
+void isr_process(){
+    // Create and start the periodic timer
+    const esp_timer_create_args_t periodic_timer_args = {
+        .callback = &timer_isr,
+        .name = "periodic_timer",
+
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 250)); // 50 microseconds
+
+    while (1)
+    {
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+}
+
+
+
+/*
 void receiver_process()
 {
     char message_from_sender[100] = {0};
@@ -134,18 +381,25 @@ void receiver_process()
             binary[i] = (decoded_byte >> i) & 1;
         }
         log(INFORMATION, "Decoded byte: %d - Binary: %d%d%d%d%d%d%d%d", decoded_byte, binary[7], binary[6], binary[5], binary[4], binary[3], binary[2], binary[1], binary[0]);
-        if(has_synced == 1)  {
-            if (decoded_byte == 0x7E) {
+        if (has_synced == 1)
+        {
+            if (decoded_byte == 0x7E)
+            {
                 // Send buffer over UART
                 uart_write_bytes(UART_NUM, uart_buffer, buffer_index);
-                buffer_index = 0; // Reset buffer index
+                buffer_index = 0;                    // Reset buffer index
                 memset(uart_buffer, 0, BUFFER_SIZE); // Clear buffer
-            } else {
+            }
+            else
+            {
                 // Add decoded byte to buffer
-                if (buffer_index < BUFFER_SIZE) {
+                if (buffer_index < BUFFER_SIZE)
+                {
                     uart_buffer[buffer_index] = decoded_byte;
                     buffer_index++;
-                } else {
+                }
+                else
+                {
                     log(WARNING, "Buffer overflow");
                 }
             }
@@ -202,50 +456,28 @@ void receiver_process()
         {
             log(SUCCESS, "SYNCED");
             has_synced = 1;
-            
         }
 
+                 // Assume message is being send
+                if (first_byte == 0)
+                {
+                    log(INFORMATION, "Expecting message size");
+                    first_byte = 1;
+                    message_index = 0;
+                    message_size = decoded_byte;
+                    memset(message_from_sender, 0, MESSAGE_SIZE);
+                }
 
+                message_from_sender[message_index] = decoded_byte;
+                log(INFORMATION, "Got char: %c. I expect %d characters more", decoded_byte, MESSAGE_SIZE - message_index);
+                message_index++;
 
-/*         // Assume message is being send
-        if (first_byte == 0)
-        {
-            log(INFORMATION, "Expecting message size");
-            first_byte = 1;
-            message_index = 0;
-            message_size = decoded_byte;
-            memset(message_from_sender, 0, MESSAGE_SIZE);
-        }
-
-        message_from_sender[message_index] = decoded_byte;
-        log(INFORMATION, "Got char: %c. I expect %d characters more", decoded_byte, MESSAGE_SIZE - message_index);
-        message_index++;
-
-        if (message_index == message_size + 1)
-        {
-            log(SUCCESS, "Message received: %s", message_from_sender);
-            message_index = 0;
-            has_synced = 0;
-        } */
-
+                if (message_index == message_size + 1)
+                {
+                    log(SUCCESS, "Message received: %s", message_from_sender);
+                    message_index = 0;
+                    has_synced = 0;
+                } 
     }
 }
-
-
-void reader_process()
-{
-    while (1)
-    {
-        while (xSemaphoreTake(xMutex, 0) != pdTRUE)
-        {
-            // Spinlock: wait until the mutex is available
-            taskYIELD();
-        }
-
-        // Read from shared_array
-        log(INFORMATION, "Reader read: %d", shared_char);
-        uart_write_bytes(UART_NUM, &shared_char, 1);
-        xSemaphoreGive(xMutex);
-        vTaskDelay(10 / portTICK_PERIOD_MS);
-    }
-}
+*/
