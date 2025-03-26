@@ -5,6 +5,7 @@
 #include "esp_rom_spiflash.h"
 #include "../components/logging/logging.h"
 #include "../components/manchester_encoding/manchesterencoding.h"
+#include "../components/protocol/protocol.h"
 #include "../api/read_handler/read_handler.h"
 #include "../api/light_handler/light_handler.h"
 #include "../api/serial/serial.h"
@@ -39,20 +40,6 @@ void setup();
 void send_health_process();
 void isr_process();
 
-uint8_t bit_count = 0;
-uint8_t temp_buffer[16] = {0}; // Adjusted size to 8
-uint8_t last_bit = 0xFF;       // Initialize to an invalid value
-uint8_t spacing_count = 0;
-
-uint8_t bit_read_count = 0;
-
-uint8_t stable_bit = 0xFF; // Current stable bit being tracked
-uint8_t stable_count = 0;  // Count of consecutive identical bits
-
-uint64_t last_valid_bit_time = 0; // Timestamp of the last valid bit
-uint64_t current_time = 0;        // Current timestamp
-float bitrate = 0;                // Calculated bitrate
-
 typedef enum
 {
     STATE_START,
@@ -71,22 +58,20 @@ typedef enum
     STATE_1001010101010,
     STATE_10010101010101,
     STATE_100101010101011,
-    STATE_1001010101010110,
     STATE_END
 } FSAState;
-
+uint8_t send_data = 0;
+uint8_t received_buffer[16] = {0};
+uint8_t received_buffer_index = 0;
+uint8_t received_decoded_buffer[1024] = {0};
 FSAState fsa_state = STATE_START;
 
 void reset_fsa()
 {
+    printf("Resetting FSA\n");
     fsa_state = STATE_START;
-    bit_count = 0;
-    memset(temp_buffer, 0, 16);
-    stable_bit = 0xFF;
-    stable_count = 0;
-    spacing_count = 0;
-    last_bit = 0xFF;
-    printf("\n");
+    received_buffer_index = 0;
+    memset(received_buffer, 0, 16);
 }
 
 void process_fsa(uint8_t bit)
@@ -184,12 +169,9 @@ void process_fsa(uint8_t bit)
 
     case STATE_100101010101011:
         if (bit == 0)
-            fsa_state = STATE_1001010101010110;
+            fsa_state = STATE_END;
         else
             reset_fsa();
-        break;
-    case STATE_1001010101010110:
-        fsa_state = STATE_END;
         break;
     case STATE_END:
         // Already in the end state, do nothing
@@ -201,6 +183,20 @@ QueueHandle_t timer_data_queue; // Queue to transfer data from ISR to thread
 
 void timer_data_process()
 {
+    // Configure UART parameters
+    uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_APB,
+    };
+
+    // Install UART driver
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
+    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
+    uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0);
     uint8_t received_bit;
     while (1)
     {
@@ -214,72 +210,60 @@ void timer_data_process()
     }
 }
 
+
+
 void IRAM_ATTR timer_isr(void *arg)
 {
     uint8_t current_bit = read_env_bit();
 
-    // Send the bit to the queue
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    xQueueSendFromISR(timer_data_queue, &current_bit, &xHigherPriorityTaskWoken);
+    // First check if the bit is stable or not
+
+    uint8_t res = process_stable_bits(current_bit);
+
+     if (res == 0)
+    {
+        return;
+    } 
+
+        // Else consider it a valid manchester bit
+        received_buffer[received_buffer_index] = current_bit;
+        received_buffer_index++;
+
+    //printf("%d", current_bit);
+    // Process the bit through the FSA
+    process_fsa(current_bit);
 
 
-    // uint8_t current_bit = read_env_bit();
 
-    /*     printf("%d", current_bit);
-        bit_read_count++;
-        if (bit_read_count == 16)
-        {
-            printf("\n");
-            bit_read_count = 0;
-        } */
-    
-        // Check if the current bit matches the stable bit
-        /* if (current_bit == stable_bit)
-        {
-            stable_count++;
+    if (fsa_state == STATE_END)
+    {
+        for(int i = 0; i < 16; i++){
+            printf("%d", received_buffer[i]);
         }
-        else
-        {
-            // If the bit changes, reset the stable count
-            stable_bit = current_bit;
-            stable_count = 1;
+        printf("\n");
+        printf("Got to the end of FSA\n");
+        reset_fsa();
+        // Send the bit to the queue
+/*         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        xQueueSendFromISR(timer_data_queue, &current_bit, &xHigherPriorityTaskWoken);
+        reset_fsa(); */
+        
+    }
+
+    if (received_buffer_index == 16)
+    {
+        // Decode the buffer
+        //printf("\n");
+
+/*         uint8_t decoded_byte = decode_manchester_byte(received_buffer);
+        if(decoded_byte == 0x7E){
+            printf("Decoded byte: %d\n", decoded_byte);
+            printf("End of message\n");
         }
-    
-        // If the stable count reaches the threshold (3 readings), process the bit
-        if (stable_count >= 3)
-        {
-            // Process the bit through the FSA
-            process_fsa(current_bit);
-    
-            // Only add the bit to the buffer if it follows the FSA
-            if (fsa_state != STATE_START && fsa_state != STATE_END)
-            {
-                printf("%d", current_bit);
-                temp_buffer[bit_count] = stable_bit;
-                bit_count++;
-            } 
-    
-            
-    
-            // Check if the FSA reached the end state
-            if (fsa_state == STATE_END)
-            {
-                // log(SUCCESS, "Pattern 100101010101010110 detected!");
-    
-                reset_fsa(); // Reset the FSA for the next detection
-            }
-    
-            stable_count = 0; // Reset stable count for the next bit
-        }
-    
-        // Process when 16 bits are collected
-        if (bit_count == 16)
-        {
-            uint8_t decoded_byte = decode_manchester_byte(temp_buffer);
-            printf("\n");
-            bit_count = 0;
-            memset(temp_buffer, 0, 16);
-        } */
+        received_decoded_buffer[received_buffer_index] = decoded_byte;*/
+        received_buffer_index = 0;
+        memset(received_buffer, 0, 16); 
+    }
 }
 
 void app_main(void)
@@ -305,20 +289,6 @@ void app_main(void)
 
 void setup()
 {
-    // Configure UART parameters
-    uart_config_t uart_config = {
-        .baud_rate = 115200,
-        .data_bits = UART_DATA_8_BITS,
-        .parity = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = UART_SCLK_APB,
-    };
-
-    // Install UART driver
-    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
-    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
-    uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0);
 
     setup_read_handler();
     setup_light_handler();
@@ -334,7 +304,8 @@ void send_health_process()
     }
 }
 
-void isr_process(){
+void isr_process()
+{
     // Create and start the periodic timer
     const esp_timer_create_args_t periodic_timer_args = {
         .callback = &timer_isr,
@@ -350,7 +321,63 @@ void isr_process(){
     }
 }
 
+// uint8_t current_bit = read_env_bit();
 
+/*     printf("%d", current_bit);
+    bit_read_count++;
+    if (bit_read_count == 16)
+    {
+        printf("\n");
+        bit_read_count = 0;
+    } */
+
+// Check if the current bit matches the stable bit
+/* if (current_bit == stable_bit)
+{
+    stable_count++;
+}
+else
+{
+    // If the bit changes, reset the stable count
+    stable_bit = current_bit;
+    stable_count = 1;
+}
+
+// If the stable count reaches the threshold (3 readings), process the bit
+if (stable_count >= 3)
+{
+    // Process the bit through the FSA
+    process_fsa(current_bit);
+
+    // Only add the bit to the buffer if it follows the FSA
+    if (fsa_state != STATE_START && fsa_state != STATE_END)
+    {
+        printf("%d", current_bit);
+        temp_buffer[bit_count] = stable_bit;
+        bit_count++;
+    }
+
+
+
+    // Check if the FSA reached the end state
+    if (fsa_state == STATE_END)
+    {
+        // log(SUCCESS, "Pattern 100101010101010110 detected!");
+
+        reset_fsa(); // Reset the FSA for the next detection
+    }
+
+    stable_count = 0; // Reset stable count for the next bit
+}
+
+// Process when 16 bits are collected
+if (bit_count == 16)
+{
+    uint8_t decoded_byte = decode_manchester_byte(temp_buffer);
+    printf("\n");
+    bit_count = 0;
+    memset(temp_buffer, 0, 16);
+} */
 
 /*
 void receiver_process()
@@ -477,7 +504,7 @@ void receiver_process()
                     log(SUCCESS, "Message received: %s", message_from_sender);
                     message_index = 0;
                     has_synced = 0;
-                } 
+                }
     }
 }
 */

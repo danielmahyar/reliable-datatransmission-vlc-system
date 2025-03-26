@@ -3,6 +3,8 @@
 #include "../../main/constants.h"
 #include "../../hal/adc/adc.h"
 
+#define DIFF_THRESH 100
+
 /**
  * @brief Setup the read handler
  * 
@@ -17,3 +19,5 @@ void setup_read_handler();
  * 
  */
 uint8_t read_env_bit();
+
+uint8_t read_new();

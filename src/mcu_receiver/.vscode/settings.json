@@ -22,7 +22,8 @@
         "led.h": "c",
         "inttypes.h": "c",
         "constants.h": "c",
-        "uart.h": "c"
+        "uart.h": "c",
+        "read_handler.h": "c"
     },
     "idf.customExtraVars": {
         "IDF_TARGET": "esp32"

@@ -1,3 +1,3 @@
 
 main: 
-	gcc manchesterencoding.c -o a.out
+	gcc protocol.c -o a.out && ./a.out
