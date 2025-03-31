@@ -3,7 +3,7 @@
 #include "../../main/constants.h"
 #include "../../hal/adc/adc.h"
 
-#define DIFF_THRESH 100
+#define DIFF_THRESH 50
 
 /**
  * @brief Setup the read handler

@@ -12,12 +12,15 @@
 #include "rom/ets_sys.h"
 #include "esp_timer.h"
 #include "esp_task_wdt.h"
-
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
+#include "esp_random.h"
 
 #define UART_NUM UART_NUM_0 // Use UART1
 #define TXD_PIN (GPIO_NUM_17)
 #define RXD_PIN (GPIO_NUM_16)
 #define BUF_SIZE (1024)
+#define SEND_RANDOM 1
 
 /*
  *  sync(1) -> Node 2 (assuming node 2 is not trying to send anything at the moment)
@@ -49,16 +52,40 @@ SemaphoreHandle_t xMutexLength;
 
 esp_timer_handle_t periodic_timer;
 
+QueueHandle_t xMessageQueue;
+
+
+uint8_t buffer_1[16] = {1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0};
+uint8_t buffer_2[16] = {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1};
+uint8_t buffer_3[16] = {1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0};
+uint8_t buffer_4[16] = {1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1};
+
+uint8_t *buffers[4] = {buffer_1, buffer_2, buffer_3, buffer_4};
 uint8_t buffer_index = 0;
-uint8_t buffer[] = {1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0};
-void IRAM_ATTR timer_isr(void* arg)
+
+uint8_t rnd = 0;
+
+void IRAM_ATTR timer_isr(void *arg)
 {
-    set_light_state(buffer[buffer_index]);
-    buffer_index++;
-    if (buffer_index == 16)
+#ifdef SEND_RANDOM
+    // Send the corresponding buffer to the light
+    set_light_state(buffers[rnd][buffer_index]);
+    buffer_index++; 
+
+    if(buffer_index == 16)
     {
         buffer_index = 0;
+        rnd = esp_random() % 4; // Randomly select a buffer
+        printf("Random buffer: %d\n", rnd);
     }
+
+#else
+    char byte;
+    if (xQueueReceiveFromISR(xMessageQueue, &byte, NULL) == pdTRUE)
+    {
+        set_light_state(byte);
+    }
+#endif
 }
 
 void setup();
@@ -66,13 +93,19 @@ void send_health_process();
 void sender_process();
 void read_process();
 
-
 void app_main(void)
 {
     esp_task_wdt_deinit();
-    
+
     setup();
     log(INFORMATION, "Setup complete");
+
+    xMessageQueue = xQueueCreate(16, sizeof(char)); // Queue for 16 bytes
+    if (xMessageQueue == NULL)
+    {
+        log(FAILURE, "Queue creation failed");
+        return;
+    }
 
     xMutexBuffer = xSemaphoreCreateMutex();
     xMutexLength = xSemaphoreCreateMutex();
@@ -86,36 +119,36 @@ void app_main(void)
     const esp_timer_create_args_t periodic_timer_args = {
         .callback = &timer_isr,
         .name = "periodic_timer",
-
-        
     };
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 1000)); // 50 microseconds
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 10000)); // 50 microseconds
 
-    while(1){
+    xTaskCreatePinnedToCore(read_process, "handle_reading_logic", 4096, NULL, 5, NULL, 1);
+    // xTaskCreatePinnedToCore(sender_process, "handle_sending_logic", 4096, NULL, 5, NULL, 0);
+    // xTaskCreatePinnedToCore(send_health_process, "handle_send_health", 4096, NULL, 5, NULL, 1);
+
+    while (1)
+    {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
-    // xTaskCreatePinnedToCore(sender_process, "handle_sending_logic", 4096, NULL, 5, NULL, 0);
-    xTaskCreatePinnedToCore(read_process, "handle_reading_logic", 4096, NULL, 5, NULL, 1);
-/*     xTaskCreatePinnedToCore(send_health_process, "handle_send_health", 4096, NULL, 5, NULL, 1);
- */}
+}
 
 void setup()
 {
     // Configure UART parameters
-    uart_config_t uart_config = {
-        .baud_rate = 115200,
-        .data_bits = UART_DATA_8_BITS,
-        .parity = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = UART_SCLK_APB,
-    };
+    /*     uart_config_t uart_config = {
+            .baud_rate = 115200,
+            .data_bits = UART_DATA_8_BITS,
+            .parity = UART_PARITY_DISABLE,
+            .stop_bits = UART_STOP_BITS_1,
+            .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+            .source_clk = UART_SCLK_APB,
+        };
 
-    // Install UART driver
-    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
-    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
-    uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0);
+        // Install UART driver
+        ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
+        ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
+        uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0); */
 
     setup_read_handler();
     setup_light_handler();
@@ -181,19 +214,19 @@ void sender_process(void *param)
 
 void read_process(void *param)
 {
-    // Read from uart
     while (1)
     {
-
         uint32_t len = uart_read_bytes(UART_NUM, received_message_buffer, BUF_SIZE, 100 / portTICK_PERIOD_MS);
         if (len > 0)
         {
-            xSemaphoreTake(xMutexBuffer, portMAX_DELAY);
-            xSemaphoreTake(xMutexLength, portMAX_DELAY);
-            received_message_length = len;
-            xSemaphoreGive(xMutexLength);
-            xSemaphoreGive(xMutexBuffer);
-
+            for (uint32_t i = 0; i < len; i++)
+            {
+                // Encode manchester byte
+                if (xQueueSend(xMessageQueue, &received_message_buffer[i], portMAX_DELAY) != pdTRUE)
+                {
+                    log(FAILURE, "Failed to send byte to queue");
+                }
+            }
             log(SUCCESS, "Received %d bytes", len);
         }
     }

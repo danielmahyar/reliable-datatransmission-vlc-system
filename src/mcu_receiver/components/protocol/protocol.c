@@ -15,9 +15,10 @@ uint8_t process_stable_bits(uint8_t current_bit)
     {
         stable_bit = current_bit;
         stable_count = 1;
+        // printf(" ");
     }
 
-    if(stable_count >= 3){
+    if(stable_count >= 4){
         stable_bit = 0xFF;
         stable_count = 0;
         return 1;

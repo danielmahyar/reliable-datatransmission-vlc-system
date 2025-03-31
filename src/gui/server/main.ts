@@ -222,10 +222,6 @@ const port = new SerialPort({
   baudRate: 115200,
 }); 
 
-/* port.on("data", (data) => {
-  const message = data.toString();
-  console.log(message);
-}); */
 
 /* const delimiterParser = port.pipe(new DelimiterParser({ delimiter: Buffer.from([0x7E])}));
  */
@@ -258,7 +254,7 @@ app.post("/upload", async (req, res) => {
 });
 
 server.listen(3001, () => {
-  console.log("listening on *:3000");
+  console.log("listening on *:3001");
 });
 
 async function sendPacket(packet: Buffer): Promise<boolean> {

@@ -21,6 +21,7 @@
 #define SHARED_ARRAY_SIZE 100
 #define BUFFER_SIZE 1024
 #define MAX_SPACING 3 // Maximum spacing allowed between bits in "01" or "10" patterns
+#define DEBUG 1       // Enable debug mode
 
 typedef enum
 {
@@ -35,6 +36,12 @@ ReceiverState receiver_state = NOT_SYNCED;
 SenderState sender_state = NOT_SENDING;
 
 esp_timer_handle_t periodic_timer;
+
+#if DEBUG == 1
+#define DEBUG_PRINT(...) printf(__VA_ARGS__)
+#else
+#define DEBUG_PRINT(...)
+#endif // DEBUG
 
 void setup();
 void send_health_process();
@@ -65,111 +72,177 @@ uint8_t received_buffer[16] = {0};
 uint8_t received_buffer_index = 0;
 uint8_t received_decoded_buffer[1024] = {0};
 FSAState fsa_state = STATE_START;
+uint8_t fsa_accepted = 0;
 
 void reset_fsa()
 {
-    printf("Resetting FSA\n");
     fsa_state = STATE_START;
+    DEBUG_PRINT("R");
     received_buffer_index = 0;
     memset(received_buffer, 0, 16);
 }
 
 void process_fsa(uint8_t bit)
 {
+    static uint8_t skip = 0;
+    DEBUG_PRINT("%d", bit);
+    if (skip)
+    {
+        DEBUG_PRINT("Skip\n");
+        skip = 0;
+        return;
+    }
+
     switch (fsa_state)
     {
     case STATE_START:
         if (bit == 1)
+        {
             fsa_state = STATE_1;
+            DEBUG_PRINT(" S1 ");
+        }
+        else
+        {
+            fsa_state = STATE_START;
+            reset_fsa();
+        }
         break;
     case STATE_1:
         if (bit == 0)
+        {
             fsa_state = STATE_10;
+            DEBUG_PRINT(" S10 ");
+        }
         else
             reset_fsa();
         break;
     case STATE_10:
         if (bit == 0)
+        {
             fsa_state = STATE_100;
+            DEBUG_PRINT(" S100 ");
+        }
         else
+        {
+            skip = 1;
             reset_fsa();
+        }
         break;
     case STATE_100:
         if (bit == 1)
+        {
             fsa_state = STATE_1001;
+            DEBUG_PRINT(" S1001 ");
+        }
         else
             reset_fsa();
         break;
     case STATE_1001:
         if (bit == 0)
+        {
             fsa_state = STATE_10010;
+            DEBUG_PRINT(" S10010 ");
+        }
         else
             reset_fsa();
         break;
     case STATE_10010:
         if (bit == 1)
+        {
             fsa_state = STATE_100101;
+            DEBUG_PRINT(" S100101 ");
+        }
         else
             reset_fsa();
         break;
     case STATE_100101:
         if (bit == 0)
+        {
             fsa_state = STATE_1001010;
+            DEBUG_PRINT(" S1001010 ");
+        }
         else
             reset_fsa();
         break;
     case STATE_1001010:
         if (bit == 1)
+        {
             fsa_state = STATE_10010101;
+            DEBUG_PRINT(" S10010101 ");
+        }
         else
             reset_fsa();
         break;
     case STATE_10010101:
         if (bit == 0)
+        {
             fsa_state = STATE_100101010;
+            DEBUG_PRINT(" S100101010 ");
+        }
         else
             reset_fsa();
         break;
     case STATE_100101010:
         if (bit == 1)
+        {
             fsa_state = STATE_1001010101;
+            DEBUG_PRINT(" S1001010101 ");
+        }
         else
             reset_fsa();
         break;
     case STATE_1001010101:
         if (bit == 0)
+        {
             fsa_state = STATE_10010101010;
+            DEBUG_PRINT(" S10010101010 ");
+        }
         else
             reset_fsa();
         break;
     case STATE_10010101010:
         if (bit == 1)
+        {
             fsa_state = STATE_100101010101;
+            DEBUG_PRINT(" S100101010101 ");
+        }
         else
             reset_fsa();
         break;
     case STATE_100101010101:
         if (bit == 0)
+        {
             fsa_state = STATE_1001010101010;
+            DEBUG_PRINT(" S1001010101010 ");
+        }
         else
             reset_fsa();
         break;
     case STATE_1001010101010:
         if (bit == 1)
+        {
             fsa_state = STATE_10010101010101;
+            DEBUG_PRINT(" S10010101010101 ");
+        }
         else
             reset_fsa();
         break;
     case STATE_10010101010101:
         if (bit == 1)
+        {
             fsa_state = STATE_100101010101011;
+            DEBUG_PRINT(" S100101010101011 ");
+        }
         else
             reset_fsa();
         break;
 
     case STATE_100101010101011:
         if (bit == 0)
+        {
             fsa_state = STATE_END;
+            DEBUG_PRINT(" SE ");
+        }
         else
             reset_fsa();
         break;
@@ -183,20 +256,7 @@ QueueHandle_t timer_data_queue; // Queue to transfer data from ISR to thread
 
 void timer_data_process()
 {
-    // Configure UART parameters
-    uart_config_t uart_config = {
-        .baud_rate = 115200,
-        .data_bits = UART_DATA_8_BITS,
-        .parity = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = UART_SCLK_APB,
-    };
 
-    // Install UART driver
-    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
-    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
-    uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0);
     uint8_t received_bit;
     while (1)
     {
@@ -204,66 +264,65 @@ void timer_data_process()
         if (xQueueReceive(timer_data_queue, &received_bit, portMAX_DELAY))
         {
             // Process the received bit
-            printf("Processing bit: %d\n", received_bit);
+            // printf("Received bit: %d\n", received_bit);
+            DEBUG_PRINT("Processing bit: %d\n", received_bit);
+            char temp_buffer[1] = {0};
+            temp_buffer[0] = received_bit;
+            uart_write_bytes(UART_NUM_0, temp_buffer, 1);
             // Add further processing logic here if needed
         }
     }
 }
 
-
-
 void IRAM_ATTR timer_isr(void *arg)
 {
     uint8_t current_bit = read_env_bit();
 
-    // First check if the bit is stable or not
-
     uint8_t res = process_stable_bits(current_bit);
 
-     if (res == 0)
+    if (res == 0)
     {
         return;
-    } 
+    }
 
-        // Else consider it a valid manchester bit
-        received_buffer[received_buffer_index] = current_bit;
-        received_buffer_index++;
+    // Else consider it a valid manchester bit
+    received_buffer[received_buffer_index] = current_bit;
+    received_buffer_index++;
 
-    //printf("%d", current_bit);
-    // Process the bit through the FSA
+    //  Process the bit through the FSA
     process_fsa(current_bit);
 
-
-
-    if (fsa_state == STATE_END)
+    if (fsa_state == STATE_END && fsa_accepted == 0)
     {
-        for(int i = 0; i < 16; i++){
-            printf("%d", received_buffer[i]);
-        }
-        printf("\n");
-        printf("Got to the end of FSA\n");
-        reset_fsa();
-        // Send the bit to the queue
-/*         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        xQueueSendFromISR(timer_data_queue, &current_bit, &xHigherPriorityTaskWoken);
-        reset_fsa(); */
-        
+        fsa_accepted = 1;
+        DEBUG_PRINT("Got to the end of FSA\n");
+
+        uint8_t decoded_byte = decode_manchester_byte(received_buffer);
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        xQueueSendFromISR(timer_data_queue, &decoded_byte, &xHigherPriorityTaskWoken);
+        received_buffer_index = 0;
+        memset(received_buffer, 0, 16);
+        // reset_fsa();
     }
 
     if (received_buffer_index == 16)
     {
-        // Decode the buffer
-        //printf("\n");
-
-/*         uint8_t decoded_byte = decode_manchester_byte(received_buffer);
-        if(decoded_byte == 0x7E){
-            printf("Decoded byte: %d\n", decoded_byte);
-            printf("End of message\n");
+        // Send the bit to the queue
+        if (is_valid_manchester(received_buffer) == 0)
+        {
+            DEBUG_PRINT("Invalid Manchester encoding\n");
+            fsa_accepted = 0;
+            reset_fsa();
+            return;
         }
-        received_decoded_buffer[received_buffer_index] = decoded_byte;*/
+        uint8_t decoded_byte = decode_manchester_byte(received_buffer);
+        DEBUG_PRINT("Decoded byte: %d\n", decoded_byte);
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        xQueueSendFromISR(timer_data_queue, &decoded_byte, &xHigherPriorityTaskWoken);
         received_buffer_index = 0;
-        memset(received_buffer, 0, 16); 
+        memset(received_buffer, 0, 16);
     }
+    DEBUG_PRINT("E\n");
 }
 
 void app_main(void)
@@ -289,7 +348,20 @@ void app_main(void)
 
 void setup()
 {
+    // Configure UART parameters
+    uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_APB,
+    };
 
+    // Install UART driver
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
+    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
+    uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0);
     setup_read_handler();
     setup_light_handler();
 }
@@ -298,8 +370,8 @@ void send_health_process()
 {
     while (1)
     {
-        printf("Sender;%d;%d\n", NODE_ID, sender_state);
-        printf("Receiver;%d;%d\n", NODE_ID, receiver_state);
+        DEBUG_PRINT("Sender;%d;%d\n", NODE_ID, sender_state);
+        DEBUG_PRINT("Receiver;%d;%d\n", NODE_ID, receiver_state);
         vTaskDelay(PING_DELAY / portTICK_PERIOD_MS);
     }
 }
@@ -313,198 +385,10 @@ void isr_process()
 
     };
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 250)); // 50 microseconds
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 2000)); // 50 microseconds
 
     while (1)
     {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
-
-// uint8_t current_bit = read_env_bit();
-
-/*     printf("%d", current_bit);
-    bit_read_count++;
-    if (bit_read_count == 16)
-    {
-        printf("\n");
-        bit_read_count = 0;
-    } */
-
-// Check if the current bit matches the stable bit
-/* if (current_bit == stable_bit)
-{
-    stable_count++;
-}
-else
-{
-    // If the bit changes, reset the stable count
-    stable_bit = current_bit;
-    stable_count = 1;
-}
-
-// If the stable count reaches the threshold (3 readings), process the bit
-if (stable_count >= 3)
-{
-    // Process the bit through the FSA
-    process_fsa(current_bit);
-
-    // Only add the bit to the buffer if it follows the FSA
-    if (fsa_state != STATE_START && fsa_state != STATE_END)
-    {
-        printf("%d", current_bit);
-        temp_buffer[bit_count] = stable_bit;
-        bit_count++;
-    }
-
-
-
-    // Check if the FSA reached the end state
-    if (fsa_state == STATE_END)
-    {
-        // log(SUCCESS, "Pattern 100101010101010110 detected!");
-
-        reset_fsa(); // Reset the FSA for the next detection
-    }
-
-    stable_count = 0; // Reset stable count for the next bit
-}
-
-// Process when 16 bits are collected
-if (bit_count == 16)
-{
-    uint8_t decoded_byte = decode_manchester_byte(temp_buffer);
-    printf("\n");
-    bit_count = 0;
-    memset(temp_buffer, 0, 16);
-} */
-
-/*
-void receiver_process()
-{
-    char message_from_sender[100] = {0};
-    int message_index = 0;
-
-    uint8_t manchester_encoded[BYTE_MANCHESTER_SIZE] = {0};
-
-    uint8_t has_synced = 0;
-    uint8_t first_byte = 0;
-    uint8_t message_size = 0;
-
-    while (1)
-    {
-        memset(manchester_encoded, 0, 16);
-        for (int i = 0; i < BYTE_MANCHESTER_SIZE; i++)
-        {
-            manchester_encoded[i] = read_env_bit();
-            vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
-        }
-
-        uint8_t decoded_byte = decode_manchester_byte(manchester_encoded);
-        // print binary representation of decoded byte
-        char binary[BYTE_SIZE];
-        for (uint8_t i = 0; i < 8; i++)
-        {
-            binary[i] = (decoded_byte >> i) & 1;
-        }
-        log(INFORMATION, "Decoded byte: %d - Binary: %d%d%d%d%d%d%d%d", decoded_byte, binary[7], binary[6], binary[5], binary[4], binary[3], binary[2], binary[1], binary[0]);
-        if (has_synced == 1)
-        {
-            if (decoded_byte == 0x7E)
-            {
-                // Send buffer over UART
-                uart_write_bytes(UART_NUM, uart_buffer, buffer_index);
-                buffer_index = 0;                    // Reset buffer index
-                memset(uart_buffer, 0, BUFFER_SIZE); // Clear buffer
-            }
-            else
-            {
-                // Add decoded byte to buffer
-                if (buffer_index < BUFFER_SIZE)
-                {
-                    uart_buffer[buffer_index] = decoded_byte;
-                    buffer_index++;
-                }
-                else
-                {
-                    log(WARNING, "Buffer overflow");
-                }
-            }
-            continue;
-        }
-        if (decoded_byte != SYNC_BYTE)
-        {
-            uint8_t is_valid = is_valid_manchester(manchester_encoded);
-            // log(WARNING, "Not synced - %s valid manchester", is_valid ? "is" : "is not");
-
-            if (is_valid == 0)
-            {
-                // log(INFORMATION, "Waiting for 25 ms");
-                vTaskDelay(OFFSET_DELAY / portTICK_PERIOD_MS);
-            }
-            else
-            {
-                uint32_t delay = SAMPLING_RATE;
-                // check if decoded byte has 2 consecutive 0s in binary representation (at some point in string)
-                if (decoded_byte == 63 || decoded_byte == 159 || decoded_byte == 207 || decoded_byte == 231 || decoded_byte == 243 || decoded_byte == 249 || decoded_byte == 252)
-                {
-                    log(INFORMATION, "Correct bits but missing sequence. Number %d", decoded_byte);
-                    switch (decoded_byte)
-                    {
-                    case 63: // 01111111
-                        delay = SAMPLING_RATE;
-                        break;
-                    case 159: // 10111111
-                        delay = SAMPLING_RATE * 2;
-                        break;
-                    case 207: // 11001111
-                        delay = SAMPLING_RATE * 3;
-                        break;
-                    case 231: // 11100111
-                        delay = SAMPLING_RATE * 4;
-                        break;
-                    case 243: // 11110011
-                        delay = SAMPLING_RATE * 5;
-                        break;
-                    case 249: // 11111001
-                        delay = SAMPLING_RATE * 6;
-                        break;
-                    case 252: // 11111100
-                        delay = SAMPLING_RATE * 7;
-                        break;
-                    }
-                }
-                log(INFORMATION, "Waiting for %lu ms", delay);
-                vTaskDelay(delay / portTICK_PERIOD_MS);
-            }
-            continue;
-        }
-        else
-        {
-            log(SUCCESS, "SYNCED");
-            has_synced = 1;
-        }
-
-                 // Assume message is being send
-                if (first_byte == 0)
-                {
-                    log(INFORMATION, "Expecting message size");
-                    first_byte = 1;
-                    message_index = 0;
-                    message_size = decoded_byte;
-                    memset(message_from_sender, 0, MESSAGE_SIZE);
-                }
-
-                message_from_sender[message_index] = decoded_byte;
-                log(INFORMATION, "Got char: %c. I expect %d characters more", decoded_byte, MESSAGE_SIZE - message_index);
-                message_index++;
-
-                if (message_index == message_size + 1)
-                {
-                    log(SUCCESS, "Message received: %s", message_from_sender);
-                    message_index = 0;
-                    has_synced = 0;
-                }
-    }
-}
-*/

@@ -188,10 +188,11 @@ const port = new SerialPort({
 
 const receivedBuffers: Buffer[] = [];
 
-port.on("data", (data) => {
+port.on("data", (data: Buffer) => {
   console.log("Received buffer", data);
-  receivedBuffers.push(bitUnstuff(data).slice(4));
-  console.log("Length of received buffers", receivedBuffers[0].length);
+  console.log("as digit", data.readUInt8()); 
+/*   receivedBuffers.push(bitUnstuff(data).slice(4));
+  console.log("Length of received buffers", receivedBuffers[0].length); */
 
   writeFileSync("text-received.txt", Buffer.concat(receivedBuffers));
   console.log("Received buffers", receivedBuffers);
