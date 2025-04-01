@@ -21,7 +21,7 @@
 #define SHARED_ARRAY_SIZE 100
 #define BUFFER_SIZE 1024
 #define MAX_SPACING 3 // Maximum spacing allowed between bits in "01" or "10" patterns
-#define DEBUG 1       // Enable debug mode
+#define DEBUG 0       // Enable debug mode
 
 typedef enum
 {
@@ -71,6 +71,7 @@ uint8_t send_data = 0;
 uint8_t received_buffer[16] = {0};
 uint8_t received_buffer_index = 0;
 uint8_t received_decoded_buffer[1024] = {0};
+uint8_t received_decoded_buffer_index = 0;
 FSAState fsa_state = STATE_START;
 uint8_t fsa_accepted = 0;
 
@@ -253,24 +254,20 @@ void process_fsa(uint8_t bit)
 }
 
 QueueHandle_t timer_data_queue; // Queue to transfer data from ISR to thread
+SemaphoreHandle_t queue_length_semaphore;
 
 void timer_data_process()
 {
-
     uint8_t received_bit;
     while (1)
     {
-        // Wait for data from the queue
-        if (xQueueReceive(timer_data_queue, &received_bit, portMAX_DELAY))
-        {
-            // Process the received bit
-            // printf("Received bit: %d\n", received_bit);
-            DEBUG_PRINT("Processing bit: %d\n", received_bit);
-            char temp_buffer[1] = {0};
-            temp_buffer[0] = received_bit;
-            uart_write_bytes(UART_NUM_0, temp_buffer, 1);
-            // Add further processing logic here if needed
-        }
+            // Wait for data from the queue
+            if (xQueueReceive(timer_data_queue, &received_bit, portMAX_DELAY))
+            {
+                // Process the received bit
+                DEBUG_PRINT("Sending Packet\n");
+                uart_write_bytes(UART_NUM_0, &received_bit, 1);
+            }
     }
 }
 
@@ -296,10 +293,6 @@ void IRAM_ATTR timer_isr(void *arg)
     {
         fsa_accepted = 1;
         DEBUG_PRINT("Got to the end of FSA\n");
-
-        uint8_t decoded_byte = decode_manchester_byte(received_buffer);
-        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        xQueueSendFromISR(timer_data_queue, &decoded_byte, &xHigherPriorityTaskWoken);
         received_buffer_index = 0;
         memset(received_buffer, 0, 16);
         // reset_fsa();
@@ -311,14 +304,25 @@ void IRAM_ATTR timer_isr(void *arg)
         if (is_valid_manchester(received_buffer) == 0)
         {
             DEBUG_PRINT("Invalid Manchester encoding\n");
+
+            received_buffer_index = 0;
+            memset(received_buffer, 0, 16);
+
+            received_decoded_buffer_index = 0;
+            memset(received_decoded_buffer, 0, 1024);
+
             fsa_accepted = 0;
             reset_fsa();
             return;
         }
         uint8_t decoded_byte = decode_manchester_byte(received_buffer);
-        DEBUG_PRINT("Decoded byte: %d\n", decoded_byte);
+
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         xQueueSendFromISR(timer_data_queue, &decoded_byte, &xHigherPriorityTaskWoken);
+
+        DEBUG_PRINT("Decoded byte: %d\n", decoded_byte);
+
+
         received_buffer_index = 0;
         memset(received_buffer, 0, 16);
     }
@@ -334,7 +338,7 @@ void app_main(void)
     log(INFORMATION, "Setup complete");
 
     // Create the queue for transferring data from ISR
-    timer_data_queue = xQueueCreate(1000, sizeof(uint8_t));
+    timer_data_queue = xQueueCreate(1024, sizeof(uint8_t));
     if (timer_data_queue == NULL)
     {
         log(FAILURE, "Failed to create queue");

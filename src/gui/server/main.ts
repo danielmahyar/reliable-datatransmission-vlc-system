@@ -138,9 +138,8 @@ function segmentFileIntoPackets(fileBuffer: Buffer): Buffer[] {
     // Extract the segment of data for this packet
     const start = i * PACKET_SIZE;
     const end = Math.min((i + 1) * PACKET_SIZE, fileBuffer.length);
-    const dataSegment = Buffer.alloc(PACKET_SIZE, 0); // Ensure the segment is exactly 512 bytes
-    fileBuffer.copy(dataSegment, 0, start, end);
-    console.log(dataSegment.toString())
+    const dataSegment = fileBuffer.slice(start, end); // Use the exact segment without padding
+    console.log(dataSegment.toString());
     // Create a header for this packet
     const header = Buffer.alloc(4);
 
@@ -151,6 +150,8 @@ function segmentFileIntoPackets(fileBuffer: Buffer): Buffer[] {
     checksum.copy(header, 2, 0, 2); // Copy first 4 bytes of checksum to header
 
     const stuffedFrame = bitStuff(Buffer.concat([header, dataSegment]));
+
+    console.log(stuffedFrame.toString("hex"));
 
     // Combine header and data into a single packet
     const packet = Buffer.concat([stuffedFrame, Buffer.from([0x7E])]);
@@ -163,51 +164,38 @@ function segmentFileIntoPackets(fileBuffer: Buffer): Buffer[] {
 // Function to reassemble packets back into the original file
 function reassemblePackets(packets: Buffer[]): Buffer {
   // Sort packets by sequence number
-  const packetsSorted = packets.sort((a, b) => a.readUInt32BE(0) - b.readUInt32BE(0));
 
   // Extract and validate data from each packet
   const dataSegments = [];
 
-  for (const packet of packetsSorted) {
+  for (const packet of packets) {
     // Print last byte of packet
-    assert(packet.at(-1) === 0x7E, `Frame flag mismatch for packet ${packet.readUInt32BE(0)}`);
-    const packetRemoveFlag = Buffer.copyBytesFrom(packet, 0, FRAME_SIZE); 
-    const packetSanitized = bitUnstuff(packetRemoveFlag);
-    assert(packetSanitized.length <= FRAME_SIZE, `Frame size mismatch for packet ${packetSanitized.readUInt32BE(0)}`);
-    const header = packetSanitized.slice(0, HEADER_SIZE);
-    const seqNum = header.readUInt32BE(0);
-    const ackNum = header.readUInt32BE(4);
-    const flags = (header[8] << 8) | header[9];
-    const reserved = (flags >> 5) & 0x07;
-    const dataOffset = (flags >> 1) & 0x0f;
-    const windowSize = header.readUInt16BE(10);
+    // Temp remove flag from end
+    const unstuffed = bitUnstuff(packet.slice(0, -1));
 
+      const header = unstuffed.slice(0, 4);
+      const lengthOfPacket = unstuffed.readUInt16BE(0);
+      const sanatizedPacket = unstuffed.slice(4);
+      // Checksum verification
+      const checksum = header.slice(2, 4);
 
-    // Extract data segment
-    const dataSegment = packetSanitized.slice(HEADER_SIZE, packetSanitized.length - 1);
-    console.log({ start: dataSegment[0], end: dataSegment.at(-1), length: dataSegment.length });
+      const calculatedChecksum = crypto
+        .createHash("md5")
+        .update(packet)
+        .digest()
+        .slice(0, 2);
 
-    assert(dataSegment.length <= PACKET_SIZE, `Data segment length mismatch for packet ${seqNum}. Size is ${dataSegment.length} bytes`);
+      if(!calculatedChecksum.equals(checksum)) {
+        console.log("Checksum mismatch", { calculatedChecksum, checksum });
+      }
 
-    // Verify checksum
-    const calculatedChecksum = crypto
-      .createHash("md5")
-      .update(dataSegment)
-      .digest()
-      .slice(0, 4);
-    const packetChecksum = header.slice(16);
-    // printBufferAsBinary(calculatedChecksum);
-
-    if (!calculatedChecksum.equals(packetChecksum)) {
-      console.log(`Checksum mismatch for packet ${seqNum}`);
-    }
-
-    dataSegments.push(dataSegment);
+      console.log({ header, lengthOfPacket, sanatizedPacket, checksum });
+      dataSegments.push(sanatizedPacket.slice(0, lengthOfPacket));
   }
 
   // Combine all data segments
   // remove last byte
-  return Buffer.concat(dataSegments).slice(0, -1);
+  return Buffer.concat(dataSegments)
 }
 
 
@@ -230,14 +218,18 @@ const upload = multer({ storage: multer.memoryStorage() });
 app.post("/upload", async (req, res) => {
   try {
     // Load a specific file from disk
-    const fileBuffer = fs.readFileSync("text.txt");
-
+    const fileBuffer = fs.readFileSync("Black_Wallpaper-min.jpg");
+ 
     // Create an array with 10000 numbers of 0xAA
-    const mock = Buffer.alloc(1000, 0xABC); 
+    const mock = Buffer.alloc(100, 0xFF); 
 
-    const d = segmentFileIntoPackets(mock);
+    const d = segmentFileIntoPackets(fileBuffer);
 
-    console.log(d)
+    const reAssembled = reassemblePackets(d);
+    console.log(reAssembled.toString("hex"));
+    // fs.writeFileSync("reassembled.jpg", reAssembled);
+
+    console.log({d})
 
     for(const packet of d) {
       await sendPacket(packet);
@@ -245,7 +237,6 @@ app.post("/upload", async (req, res) => {
     }
 
     res.status(200).send("File uploaded successfully");
-
 
   } catch (error) {
     console.error("Error processing file:", error);
@@ -258,20 +249,20 @@ server.listen(3001, () => {
 });
 
 async function sendPacket(packet: Buffer): Promise<boolean> {
-  console.log("Sending packet");
+  // console.log("Sending packet");
   return port.write(packet);
 }
 
 async function canSendNextPackage(): Promise<void> {
   return new Promise((resolve, reject) => {
     const listener = (data: Buffer) => {
-      console.log("Received data", data.toString());
+      // console.log("Received data", data.toString());
       if(data.toString().includes("ACK")) {
         port.off("data", listener);
         resolve();
       }
     }
-    console.log("Waiting for ack");
+    //console.log("Waiting for ack");
     port.on("data", listener);
   });
 }

@@ -20,7 +20,7 @@
 #define TXD_PIN (GPIO_NUM_17)
 #define RXD_PIN (GPIO_NUM_16)
 #define BUF_SIZE (1024)
-#define SEND_RANDOM 1
+#define SEND_RANDOM 0
 
 /*
  *  sync(1) -> Node 2 (assuming node 2 is not trying to send anything at the moment)
@@ -54,7 +54,6 @@ esp_timer_handle_t periodic_timer;
 
 QueueHandle_t xMessageQueue;
 
-
 uint8_t buffer_1[16] = {1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0};
 uint8_t buffer_2[16] = {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1};
 uint8_t buffer_3[16] = {1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0};
@@ -65,14 +64,19 @@ uint8_t buffer_index = 0;
 
 uint8_t rnd = 0;
 
+bool sending_buffer_1 = true;
+
 void IRAM_ATTR timer_isr(void *arg)
 {
-#ifdef SEND_RANDOM
+    static bool sending_buffer_1 = true; // Track if buffer_1 is being sent
+    static uint8_t buffer_1_index = 0;  // Separate index for buffer_1
+
+#if SEND_RANDOM == 1
     // Send the corresponding buffer to the light
     set_light_state(buffers[rnd][buffer_index]);
-    buffer_index++; 
+    buffer_index++;
 
-    if(buffer_index == 16)
+    if (buffer_index == 16)
     {
         buffer_index = 0;
         rnd = esp_random() % 4; // Randomly select a buffer
@@ -81,9 +85,32 @@ void IRAM_ATTR timer_isr(void *arg)
 
 #else
     char byte;
-    if (xQueueReceiveFromISR(xMessageQueue, &byte, NULL) == pdTRUE)
+    if (sending_buffer_1)
     {
+        // Continue sending buffer_1
+        set_light_state(buffer_1[buffer_1_index]);
+        buffer_1_index++;
+
+        if (buffer_1_index == 16)
+        {
+            // Finished sending buffer_1, check for messages
+            buffer_1_index = 0;
+            sending_buffer_1 = false;
+        }
+    }
+    else if (xQueueReceiveFromISR(xMessageQueue, &byte, NULL) == pdTRUE)
+    {
+        // Start sending the message
+        printf("Sending bit: %d\n", byte);
         set_light_state(byte);
+    }
+    else
+    {
+        // If no message, resume sending buffer_1
+        sending_buffer_1 = true;
+        buffer_1_index = 0;
+        set_light_state(buffer_1[buffer_1_index]);
+        buffer_1_index++;
     }
 #endif
 }
@@ -92,6 +119,7 @@ void setup();
 void send_health_process();
 void sender_process();
 void read_process();
+void isr_process();
 
 void app_main(void)
 {
@@ -100,7 +128,7 @@ void app_main(void)
     setup();
     log(INFORMATION, "Setup complete");
 
-    xMessageQueue = xQueueCreate(16, sizeof(char)); // Queue for 16 bytes
+    xMessageQueue = xQueueCreate(20000, sizeof(char)); // Queue for 16 bytes
     if (xMessageQueue == NULL)
     {
         log(FAILURE, "Queue creation failed");
@@ -115,14 +143,9 @@ void app_main(void)
         return;
     }
 
-    // Create and start the periodic timer
-    const esp_timer_create_args_t periodic_timer_args = {
-        .callback = &timer_isr,
-        .name = "periodic_timer",
-    };
-    ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 10000)); // 50 microseconds
 
+
+    xTaskCreatePinnedToCore(isr_process, "handle_isr", 4096, NULL, 5, NULL, 0);
     xTaskCreatePinnedToCore(read_process, "handle_reading_logic", 4096, NULL, 5, NULL, 1);
     // xTaskCreatePinnedToCore(sender_process, "handle_sending_logic", 4096, NULL, 5, NULL, 0);
     // xTaskCreatePinnedToCore(send_health_process, "handle_send_health", 4096, NULL, 5, NULL, 1);
@@ -133,10 +156,34 @@ void app_main(void)
     }
 }
 
+void isr_process() {
+    // Create and start the periodic timer
+    const esp_timer_create_args_t periodic_timer_args = {
+        .callback = &timer_isr,
+        .name = "periodic_timer",
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 10000)); // 50 microseconds
+
+    while(1) {
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+}
+
 void setup()
 {
-    // Configure UART parameters
-    /*     uart_config_t uart_config = {
+
+
+    setup_read_handler();
+    setup_light_handler();
+}
+
+
+
+void read_process(void *param)
+{
+        // Configure UART parameters
+        uart_config_t uart_config = {
             .baud_rate = 115200,
             .data_bits = UART_DATA_8_BITS,
             .parity = UART_PARITY_DISABLE,
@@ -144,90 +191,39 @@ void setup()
             .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
             .source_clk = UART_SCLK_APB,
         };
-
+    
         // Install UART driver
         ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
         ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
-        uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0); */
+        uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0);
 
-    setup_read_handler();
-    setup_light_handler();
-}
-
-void send_health_process()
-{
-    while (1)
-    {
-        vTaskDelay(PING_DELAY / portTICK_PERIOD_MS);
-    }
-}
-
-void sender_process(void *param)
-{
-
-    uint8_t data[BYTE_MANCHESTER_SIZE] = {0};
-
-    // Send sync continuously
-    while (1)
-    {
-        xSemaphoreTake(xMutexLength, portMAX_DELAY);
-        uint32_t length = received_message_length;
-        xSemaphoreGive(xMutexLength);
-
-        log(INFORMATION, "Received message length is %d", length);
-        if (length > 0)
-        {
-            for (uint8_t i = 0; i < length; i++)
-            {
-                xSemaphoreTake(xMutexBuffer, portMAX_DELAY);
-                char byte = received_message_buffer[i];
-                xSemaphoreGive(xMutexBuffer);
-
-                encode_manchester_byte(data, byte);
-                // Send received message to the light
-                log(SUCCESS, "Sending message: %d", byte);
-                for (uint8_t j = 0; j < BYTE_MANCHESTER_SIZE; j++)
-                {
-                    set_light_state(data[j]);
-                    vTaskDelay((SAMPLING_RATE) / portTICK_PERIOD_MS);
-                }
-            }
-
-            xSemaphoreTake(xMutexLength, portMAX_DELAY);
-            received_message_length = 0;
-            xSemaphoreGive(xMutexLength);
-            log(SUCCESS, "ACK");
-        }
-        else
-        {
-            encode_manchester_byte(data, SYNC_BYTE);
-            for (uint8_t j = 0; j < BYTE_MANCHESTER_SIZE; j++)
-            {
-                // printf("%d", data[j]);
-                set_light_state(data[j]);
-                vTaskDelay((SAMPLING_RATE) / portTICK_PERIOD_MS);
-            }
-            printf("\n");
-        }
-    }
-}
-
-void read_process(void *param)
-{
     while (1)
     {
         uint32_t len = uart_read_bytes(UART_NUM, received_message_buffer, BUF_SIZE, 100 / portTICK_PERIOD_MS);
         if (len > 0)
         {
+            // First send flag to indicate that a message is being received
+
+
             for (uint32_t i = 0; i < len; i++)
             {
+                uint8_t byte = received_message_buffer[i];
+                printf("Received byte: %d\n", byte);
                 // Encode manchester byte
-                if (xQueueSend(xMessageQueue, &received_message_buffer[i], portMAX_DELAY) != pdTRUE)
+                uint8_t buf[16] = {0};
+
+                encode_manchester_byte(buf, byte);
+
+                for (uint32_t j = 0; j < 16; j++)
                 {
-                    log(FAILURE, "Failed to send byte to queue");
+                    if (xQueueSend(xMessageQueue, &buf[j], portMAX_DELAY) != pdTRUE)
+                    {
+                        log(FAILURE, "Failed to send byte to queue");
+                    }
                 }
             }
-            log(SUCCESS, "Received %d bytes", len);
+            printf("ACK\n");
+            // log(SUCCESS, "Received %d bytes", len);
         }
     }
 }

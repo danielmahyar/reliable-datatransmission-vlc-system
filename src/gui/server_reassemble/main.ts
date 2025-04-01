@@ -131,48 +131,40 @@ const FRAME_SIZE = PACKET_SIZE + HEADER_SIZE + 1; // Size of each frame (packet 
 // Function to reassemble packets back into the original file
 function reassemblePackets(packets: Buffer[]): Buffer {
   // Sort packets by sequence number
-  const packetsSorted = packets.sort((a, b) => a.readUInt32BE(0) - b.readUInt32BE(0));
 
   // Extract and validate data from each packet
   const dataSegments = [];
 
-  for (const packet of packetsSorted) {
+  for (const packet of packets) {
     // Print last byte of packet
-    assert(packet.at(-1) === 0x7E, `Frame flag mismatch for packet ${packet.readUInt32BE(0)}`);
-    const packetRemoveFlag = Buffer.copyBytesFrom(packet, 0, FRAME_SIZE); 
-    const packetSanitized = bitUnstuff(packetRemoveFlag);
-    assert(packetSanitized.length <= FRAME_SIZE, `Frame size mismatch for packet ${packetSanitized.readUInt32BE(0)}`);
-    const header = packetSanitized.slice(0, HEADER_SIZE);
-    const seqNum = header.readUInt32BE(0);
-    const flags = (header[8] << 8) | header[9];
+    // Temp remove flag from end
+    const unstuffed = bitUnstuff(packet.slice(0));
 
+      const header = unstuffed.slice(0, 4);
+      const lengthOfPacket = unstuffed.readUInt16BE(0);
+      const sanatizedPacket = unstuffed.slice(4);
+      // Checksum verification
+      const checksum = header.slice(2, 4);
 
-    // Extract data segment
-    const dataSegment = packetSanitized.slice(HEADER_SIZE, packetSanitized.length - 1);
-    console.log({ start: dataSegment[0], end: dataSegment.at(-1), length: dataSegment.length });
+      const calculatedChecksum = crypto
+        .createHash("md5")
+        .update(packet)
+        .digest()
+        .slice(0, 2);
 
-    assert(dataSegment.length <= PACKET_SIZE, `Data segment length mismatch for packet ${seqNum}. Size is ${dataSegment.length} bytes`);
+      if(!calculatedChecksum.equals(checksum)) {
+        console.log("Checksum mismatch", { calculatedChecksum, checksum });
+      }
 
-    // Verify checksum
-    const calculatedChecksum = crypto
-      .createHash("md5")
-      .update(dataSegment)
-      .digest()
-      .slice(0, 4);
-    const packetChecksum = header.slice(16);
-    // printBufferAsBinary(calculatedChecksum);
-
-    if (!calculatedChecksum.equals(packetChecksum)) {
-      console.log(`Checksum mismatch for packet ${seqNum}`);
-    }
-
-    dataSegments.push(dataSegment);
+      console.log({ header, lengthOfPacket, sanatizedPacket, checksum });
+      dataSegments.push(sanatizedPacket.slice(0, lengthOfPacket));
   }
 
   // Combine all data segments
   // remove last byte
-  return Buffer.concat(dataSegments).slice(0, -1);
+  return Buffer.concat(dataSegments)
 }
+
 
 
 const app = express();
@@ -187,15 +179,24 @@ const port = new SerialPort({
 }); 
 
 const receivedBuffers: Buffer[] = [];
+const tempBuffer: Buffer[] = [];
 
 port.on("data", (data: Buffer) => {
-  console.log("Received buffer", data);
-  console.log("as digit", data.readUInt8()); 
-/*   receivedBuffers.push(bitUnstuff(data).slice(4));
-  console.log("Length of received buffers", receivedBuffers[0].length); */
+  if(data.readUint8() === 0x7E) {
+    console.log("Received frame flag", data.toString("hex"));
+    if(tempBuffer.length > 0) {
+      console.log("Received data", Buffer.concat(tempBuffer).toString("hex"));
+      receivedBuffers.push(Buffer.concat(tempBuffer));
+      // Reverse the order of the received buffers
+      const reassembled = reassemblePackets(receivedBuffers);
+      tempBuffer.length = 0; // Clear the buffer
 
-  writeFileSync("text-received.txt", Buffer.concat(receivedBuffers));
-  console.log("Received buffers", receivedBuffers);
+      fs.writeFileSync("image.jpg", reassembled);
+    }
+    return;
+  }
+  tempBuffer.push(data);
+  console.log("Received data", data.toString("hex"));
 })
 
 function assembleFile(){
