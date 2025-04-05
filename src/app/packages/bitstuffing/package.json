@@ -1,0 +1,22 @@
+{
+  "name": "@repo/bitstuffing",
+  "type": "module",
+  "scripts": {
+    "dev": "tsc --watch",
+    "build": "tsc"
+  },
+  "exports": {
+    "./bitstuff": {
+      "types": "./src/bitstuff.ts",
+      "default": "./dist/bitstuff.js"
+    },
+    "./bitunstuff": {
+      "types": "./src/bitunstuff.ts",
+      "default": "./dist/bitunstuff.js"
+    }
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "*",
+    "typescript": "latest"
+  }
+}

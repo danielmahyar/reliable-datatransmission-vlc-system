@@ -1,0 +1,25 @@
+/* Radix Slate Color Theme */
+:root {
+    --color-background: hsl(240, 10%, 98%);
+    --color-foreground: hsl(240, 10%, 10%);
+    --color-border: hsl(240, 10%, 80%);
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+img {
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    max-width: 90%;
+    max-height: 90%;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}

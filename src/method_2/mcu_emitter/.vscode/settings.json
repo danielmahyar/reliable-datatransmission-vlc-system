@@ -1,0 +1,32 @@
+{
+    "C_Cpp.intelliSenseEngine": "default",
+    "idf.espIdfPath": "/Users/danielcargarmahyar/esp/v5.2.3/esp-idf",
+    "idf.openOcdConfigs": [
+        "interface/ftdi/esp32_devkitj_v1.cfg",
+        "target/esp32.cfg"
+    ],
+    "idf.port": "/dev/tty.usbserial-0283CEF2",
+    "idf.toolsPath": "/Users/danielcargarmahyar/.espressif",
+    "idf.flashType": "UART",
+    "files.associations": {
+        ".fantomasignore": "ignore",
+        "logging.h": "c",
+        "freertos.h": "c",
+        "manchesterencoding.h": "c",
+        "esp_rom_spiflash.h": "c",
+        "adc.h": "c",
+        "cstdlib": "c",
+        "serial.h": "c",
+        "compare": "c",
+        "light_handler.h": "c",
+        "led.h": "c",
+        "inttypes.h": "c",
+        "constants.h": "c",
+        "uart.h": "c"
+    },
+    "idf.customExtraVars": {
+        "IDF_TARGET": "esp32"
+    },
+    "idf.pythonInstallPath": "C:\\Espressif\\tools\\idf-python\\3.11.2\\python.exe",
+    "idf.portWin": "COM4"
+}
