@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VLC Uploader</title>
+    <link rel="stylesheet" href="http://localhost:3001/ui/styles.css">
+</head>
+<body>
+    <main>
+        <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="previewImage(event)">
+        <label for="fileInput" style="cursor: pointer; padding: 10px; background-color: var(--color-border); color: var(--color-foreground); border-radius: 5px;">Choose Image</label>
+        <button onclick="uploadImage()">Send to server</button>
+    </main>
+    <script>
+        function uploadImage() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (file) {
+                const formData = new FormData();
+                formData.append('image', file);
+
+                // Show the progress of the upload
+                const progressBar = document.createElement('progress');
+                progressBar.value = 0;
+                progressBar.max = 100;
+                document.body.appendChild(progressBar);
+
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', 'http://localhost:3001/upload', true);
+                xhr.upload.onprogress = function(event) {
+                    if (event.lengthComputable) {
+                        const percentComplete = (event.loaded / event.total) * 100;
+                        progressBar.value = percentComplete;
+                    }
+                };
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        console.log('Upload complete:', xhr.responseText);
+                        progressBar.value = 100; // Set to 100% on completion
+                    } else {
+                        console.error('Upload failed:', xhr.statusText);
+                    }
+                    document.body.removeChild(progressBar); // Remove progress bar after upload
+                };
+                xhr.onerror = function() {
+                    console.error('Upload error:', xhr.statusText);
+                    document.body.removeChild(progressBar); // Remove progress bar on error
+                };
+                xhr.send(formData);
+
+            } else {
+                alert('Please select an image to upload.');
+            }
+        }
+        function previewImage(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    document.body.appendChild(img);
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+    </script>
+</body>
+</html>

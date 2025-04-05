@@ -1,0 +1,25 @@
+{
+  "name": "@repo/data-segmentation",
+  "type": "module",
+  "scripts": {
+    "dev": "tsc --watch",
+    "build": "tsc"
+  },
+  "exports": {
+    "./reassemble": {
+      "types": "./src/reassemble-packets.ts",
+      "default": "./dist/reassemble-packets.js"
+    },
+    "./segment": {
+      "types": "./src/segment-packets.ts",
+      "default": "./dist/segment-packets.js"
+    }
+  },
+  "dependencies": {
+    "@repo/bitstuffing": "*"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "*",
+    "typescript": "latest"
+  }
+}

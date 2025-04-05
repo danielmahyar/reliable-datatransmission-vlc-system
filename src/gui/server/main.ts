@@ -5,53 +5,53 @@ import { Server } from "socket.io";
 import fs from "fs";
 import crypto from "crypto";
 import multer from "multer";
-import {DelimiterParser} from '@serialport/parser-delimiter'
+import { DelimiterParser } from "@serialport/parser-delimiter";
 import assert from "assert";
 
 /**
  * Performs bit stuffing on a buffer of data
  * After 5 consecutive 1s, a 0 is inserted
- * 
+ *
  * @param {Buffer} input - Buffer containing the data to be bit stuffed
  * @returns {Buffer} - Buffer containing the bit stuffed data
  */
 export function bitStuff(input: Buffer): Buffer {
   if (!Buffer.isBuffer(input)) {
-    throw new Error('Input must be a Buffer');
+    throw new Error("Input must be a Buffer");
   }
 
   // Create a buffer to store the result with potential for more bytes
   // In worst case, we might need to add a bit after every 5 bits
   const maxSize = Math.ceil(input.length * 1.2);
   const result = Buffer.alloc(maxSize);
-  
+
   let resultBitIndex = 0;
   let consecutiveOnes = 0;
-  
+
   // Process each bit in the input buffer
   for (let byteIndex = 0; byteIndex < input.length; byteIndex++) {
     const currentByte = input[byteIndex];
-    
+
     // Process each bit in the current byte
     for (let bitIndex = 7; bitIndex >= 0; bitIndex--) {
       // Extract the current bit (0 or 1)
       const bit = (currentByte >> bitIndex) & 1;
-      
+
       // Write the bit to the result buffer
       const resultByteIndex = Math.floor(resultBitIndex / 8);
       const resultBitPosition = 7 - (resultBitIndex % 8);
-      
+
       if (bit === 1) {
         // Set the bit to 1
-        result[resultByteIndex] |= (1 << resultBitPosition);
+        result[resultByteIndex] |= 1 << resultBitPosition;
         consecutiveOnes++;
       } else {
         // Leave the bit as 0 (already 0 from allocation)
         consecutiveOnes = 0;
       }
-      
+
       resultBitIndex++;
-      
+
       // After 5 consecutive 1s, insert a 0 bit
       if (consecutiveOnes === 5) {
         resultBitIndex++;
@@ -59,10 +59,10 @@ export function bitStuff(input: Buffer): Buffer {
       }
     }
   }
-  
+
   // Calculate the actual bytes used in the result
   const actualBytes = Math.ceil(resultBitIndex / 8);
-  
+
   // Return a buffer trimmed to the actual size used
   return result.subarray(0, actualBytes);
 }
@@ -70,36 +70,36 @@ export function bitStuff(input: Buffer): Buffer {
 /**
  * Performs bit unstuffing on a buffer of data
  * Removes 0s that follow 5 consecutive 1s
- * 
+ *
  * @param {Buffer} input - Buffer containing the bit stuffed data
  * @returns {Buffer} - Buffer containing the original unstuffed data
  */
 export function bitUnstuff(input: Buffer): Buffer {
   if (!Buffer.isBuffer(input)) {
-    throw new Error('Input must be a Buffer');
+    throw new Error("Input must be a Buffer");
   }
-  
+
   // Create a buffer for the result (will always be smaller than input)
   const result = Buffer.alloc(input.length);
-  
+
   let resultBitIndex = 0;
   let consecutiveOnes = 0;
-  
+
   // Process each bit in the input buffer
   for (let byteIndex = 0; byteIndex < input.length; byteIndex++) {
     const currentByte = input[byteIndex];
-    
+
     // Process each bit in the current byte
     for (let bitIndex = 7; bitIndex >= 0; bitIndex--) {
       // Extract the current bit (0 or 1)
       const bit = (currentByte >> bitIndex) & 1;
-      
+
       if (bit === 1) {
         // Add the 1 bit to the result
         const resultByteIndex = Math.floor(resultBitIndex / 8);
         const resultBitPosition = 7 - (resultBitIndex % 8);
-        result[resultByteIndex] |= (1 << resultBitPosition);
-        
+        result[resultByteIndex] |= 1 << resultBitPosition;
+
         consecutiveOnes++;
         resultBitIndex++;
       } else {
@@ -115,12 +115,12 @@ export function bitUnstuff(input: Buffer): Buffer {
       }
     }
   }
-  
+
   // Calculate the actual bytes used in the result
   const actualBytes = Math.ceil(resultBitIndex / 8);
-  
+
   // Debug log to check the result buffer
-  
+
   // Return a buffer trimmed to the actual size used
   return result.subarray(0, actualBytes);
 }
@@ -139,7 +139,6 @@ function segmentFileIntoPackets(fileBuffer: Buffer): Buffer[] {
     const start = i * PACKET_SIZE;
     const end = Math.min((i + 1) * PACKET_SIZE, fileBuffer.length);
     const dataSegment = fileBuffer.slice(start, end); // Use the exact segment without padding
-    console.log(dataSegment.toString());
     // Create a header for this packet
     const header = Buffer.alloc(4);
 
@@ -151,10 +150,8 @@ function segmentFileIntoPackets(fileBuffer: Buffer): Buffer[] {
 
     const stuffedFrame = bitStuff(Buffer.concat([header, dataSegment]));
 
-    console.log(stuffedFrame.toString("hex"));
-
     // Combine header and data into a single packet
-    const packet = Buffer.concat([stuffedFrame, Buffer.from([0x7E])]);
+    const packet = Buffer.concat([stuffedFrame, Buffer.from([0x7e])]);
     packets.push(packet);
   }
 
@@ -173,74 +170,70 @@ function reassemblePackets(packets: Buffer[]): Buffer {
     // Temp remove flag from end
     const unstuffed = bitUnstuff(packet.slice(0, -1));
 
-      const header = unstuffed.slice(0, 4);
-      const lengthOfPacket = unstuffed.readUInt16BE(0);
-      const sanatizedPacket = unstuffed.slice(4);
-      // Checksum verification
-      const checksum = header.slice(2, 4);
+    const header = unstuffed.slice(0, 4);
+    const lengthOfPacket = unstuffed.readUInt16BE(0);
+    const sanatizedPacket = unstuffed.slice(4);
+    // Checksum verification
+    const checksum = header.slice(2, 4);
 
-      const calculatedChecksum = crypto
-        .createHash("md5")
-        .update(packet)
-        .digest()
-        .slice(0, 2);
+    const calculatedChecksum = crypto
+      .createHash("md5")
+      .update(packet)
+      .digest()
+      .slice(0, 2);
 
-      if(!calculatedChecksum.equals(checksum)) {
-        console.log("Checksum mismatch", { calculatedChecksum, checksum });
-      }
+    if (!calculatedChecksum.equals(checksum)) {
+      console.log("Checksum mismatch", { calculatedChecksum, checksum });
+    }
 
-      console.log({ header, lengthOfPacket, sanatizedPacket, checksum });
-      dataSegments.push(sanatizedPacket.slice(0, lengthOfPacket));
+    dataSegments.push(sanatizedPacket.slice(0, lengthOfPacket));
   }
 
   // Combine all data segments
   // remove last byte
-  return Buffer.concat(dataSegments)
+  return Buffer.concat(dataSegments);
 }
-
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-
 // Create a port
 const port = new SerialPort({
   path: "COM4",
   baudRate: 115200,
-}); 
-
+});
 
 /* const delimiterParser = port.pipe(new DelimiterParser({ delimiter: Buffer.from([0x7E])}));
  */
 const upload = multer({ storage: multer.memoryStorage() });
 
-app.post("/upload", async (req, res) => {
+app.get("/", async (req, res) => {
   try {
     // Load a specific file from disk
-    const fileBuffer = fs.readFileSync("Black_Wallpaper-min.jpg");
- 
+    const fileBuffer = fs.readFileSync("281559149_3205653989667523_2555299130892104437_n.jpg");
+
     // Create an array with 10000 numbers of 0xAA
-    const mock = Buffer.alloc(100, 0xFF); 
+    const mock = Buffer.alloc(100, 0xff);
 
     const d = segmentFileIntoPackets(fileBuffer);
 
-    const reAssembled = reassemblePackets(d);
-    console.log(reAssembled.toString("hex"));
-    // fs.writeFileSync("reassembled.jpg", reAssembled);
+    res.status(200).send(`
+      <h1>File sent successfully ${(new Date(Date.now())).toUTCString()}!</h1> 
+      `);
 
-    console.log({d})
+    console.log("Now sending")
 
-    for(const packet of d) {
-      await sendPacket(packet);
+    for (let i = 0; i < d.length; i++) {
+      await sendPacket(d[i]);
       await canSendNextPackage();
     }
 
-    res.status(200).send("File uploaded successfully");
 
   } catch (error) {
     console.error("Error processing file:", error);
-    res.status(500).send("Error processing file");
+    res.status(500).send(`
+      <h1>Error processing file</h1>`);
   }
 });
 
@@ -257,11 +250,11 @@ async function canSendNextPackage(): Promise<void> {
   return new Promise((resolve, reject) => {
     const listener = (data: Buffer) => {
       // console.log("Received data", data.toString());
-      if(data.toString().includes("ACK")) {
+      if (data.toString().includes("ACK")) {
         port.off("data", listener);
         resolve();
       }
-    }
+    };
     //console.log("Waiting for ack");
     port.on("data", listener);
   });
@@ -345,14 +338,13 @@ function parseMessageFromESP(data: string): {
   };
 }
 
-
 // Function to print buffer as binary
 function printBufferAsBinary(buffer: Buffer): void {
-  console.log('Buffer length:', buffer.length, 'bytes');
-  console.log('Binary representation:');
-  
+  console.log("Buffer length:", buffer.length, "bytes");
+  console.log("Binary representation:");
+
   for (let i = 0; i < buffer.length; i++) {
-    const binaryByte = buffer[i].toString(2).padStart(8, '0');
-    console.log(`Byte ${i.toString().padStart(2, ' ')}: ${binaryByte}`);
+    const binaryByte = buffer[i].toString(2).padStart(8, "0");
+    console.log(`Byte ${i.toString().padStart(2, " ")}: ${binaryByte}`);
   }
 }
