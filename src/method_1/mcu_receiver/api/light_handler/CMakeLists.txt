@@ -1,0 +1,1 @@
+idf_component_register(SRCS "light_handler.c" REQUIRES led)

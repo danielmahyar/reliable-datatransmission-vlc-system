@@ -1,0 +1,1 @@
+idf_component_register(SRCS "read_handler.c" REQUIRES adc)
