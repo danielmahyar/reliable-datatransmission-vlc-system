@@ -23,7 +23,9 @@
         "inttypes.h": "c",
         "constants.h": "c",
         "uart.h": "c",
-        "read_handler.h": "c"
+        "read_handler.h": "c",
+        "assert.h": "c",
+        "protocol.h": "c"
     },
     "idf.customExtraVars": {
         "IDF_TARGET": "esp32"

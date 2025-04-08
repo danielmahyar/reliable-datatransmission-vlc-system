@@ -12,14 +12,13 @@ void setup_read_handler(){
         sum += read_adc();
     }
     calculatedThreshold = sum / 2000;
-    log(INFORMATION, "Calculated threshold: %d", calculatedThreshold);
 
 
 }
 
 uint8_t read_env_bit(){
     uint32_t val = read_adc();
-    // log(INFORMATION, "ADC Reading: %lu", val);
+    // printf("ADC Reading: %lu \n", val);
     return val > calculatedThreshold;
 }
 
@@ -41,5 +40,5 @@ uint8_t read_new() {
     }
 
 
-    return prev_bit;
+    return prev_bit == 1 ? 0 : 1;
 }

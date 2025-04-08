@@ -16,94 +16,42 @@
 #define BUF_SIZE (1024)
 #define SHARED_ARRAY_SIZE 100
 #define BUFFER_SIZE 1024
+#define DEBUG 1
 
-SemaphoreHandle_t xMutex;
-char shared_array[SHARED_ARRAY_SIZE];
-char shared_char = 0;
-char uart_buffer[BUFFER_SIZE];
-int buffer_index = 0;
+#if DEBUG == 1
+#define DEBUG_PRINT(...) printf(__VA_ARGS__)
+#else
+#define DEBUG_PRINT(...)
+#endif // DEBUG
 
-
-typedef enum
-{
-    UNDEFINED,
-    RECEIVING,
-    SENDING
-} NodeState;
-
-NodeState node_state = UNDEFINED;
-
-ReceiverState receiver_state = NOT_SYNCED;
-SenderState sender_state = NOT_SENDING;
-
-char message_buffer[MESSAGE_SIZE] = "VLC MESSAGE :)";
+QueueHandle_t timer_data_queue; // Queue to transfer data from ISR to thread
 
 void setup();
-void send_health_process();
 void receiver_process();
 void reader_process();
 
 void app_main(void)
 {
     setup();
-    log(INFORMATION, "Setup complete");
+    DEBUG_PRINT("Setup complete");
 
-    xMutex = xSemaphoreCreateMutex();
-    if (xMutex == NULL) {
-        log(FAILURE, "Failed to create mutex");
+    // Create the queue for transferring data from ISR
+    timer_data_queue = xQueueCreate(1024, sizeof(uint8_t));
+    if (timer_data_queue == NULL)
+    {
+        DEBUG_PRINT("Failed to create queue");
         return;
     }
 
-    // xTaskCreatePinnedToCore(reader_process, "reader_process", 4096, NULL, 5, NULL, 1);
-
-    uint8_t manchester_encoded[BYTE_MANCHESTER_SIZE] = {0};
-/*
-         while (1) {
-            const uint8_t flag = 0x7EEE;
-            uint8_t data[BUF_SIZE];
-            uint32_t len = uart_read_bytes(UART_NUM, data, BUF_SIZE, 100 / portTICK_PERIOD_MS);
-            if (len > 0) {
-                // Echo the received data back
-                set_led(1);
-                // log(INFORMATION, "Received %d bytes", len);
-                uart_write_bytes(UART_NUM, (const char*) data, len);
-            }
-            vTaskDelay(10 / portTICK_PERIOD_MS);
-            set_led(0);
-        } */
     xTaskCreatePinnedToCore(receiver_process, "handle_reading_logic", 4096, NULL, 5, NULL, 0);
-    // xTaskCreatePinnedToCore(send_health_process, "handle_send_health", 4096, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(reader_process, "reader_process", 4096, NULL, 5, NULL, 1);
 }
 
 void setup()
 {
-    // Configure UART parameters
-    uart_config_t uart_config = {
-        .baud_rate = 115200,
-        .data_bits = UART_DATA_8_BITS,
-        .parity = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = UART_SCLK_APB,
-    };
-
-    // Install UART driver
-    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
-    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
-    uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0);
 
     setup_read_handler();
     setup_light_handler();
-}
-
-void send_health_process()
-{
-    while (1)
-    {
-        printf("Sender;%d;%d\n", NODE_ID, sender_state);
-        printf("Receiver;%d;%d\n", NODE_ID, receiver_state);
-        vTaskDelay(PING_DELAY / portTICK_PERIOD_MS);
-    }
 }
 
 void receiver_process()
@@ -133,28 +81,17 @@ void receiver_process()
         {
             binary[i] = (decoded_byte >> i) & 1;
         }
-        log(INFORMATION, "Decoded byte: %d - Binary: %d%d%d%d%d%d%d%d", decoded_byte, binary[7], binary[6], binary[5], binary[4], binary[3], binary[2], binary[1], binary[0]);
-        if(has_synced == 1)  {
-            if (decoded_byte == 0x7E) {
-                // Send buffer over UART
-                uart_write_bytes(UART_NUM, uart_buffer, buffer_index);
-                buffer_index = 0; // Reset buffer index
-                memset(uart_buffer, 0, BUFFER_SIZE); // Clear buffer
-            } else {
-                // Add decoded byte to buffer
-                if (buffer_index < BUFFER_SIZE) {
-                    uart_buffer[buffer_index] = decoded_byte;
-                    buffer_index++;
-                } else {
-                    log(WARNING, "Buffer overflow");
-                }
-            }
+        DEBUG_PRINT("Decoded byte: %d - Binary: %d%d%d%d%d%d%d%d", decoded_byte, binary[7], binary[6], binary[5], binary[4], binary[3], binary[2], binary[1], binary[0]);
+        if (has_synced == 1)
+        {
+
+            BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+            xQueueSendFromISR(timer_data_queue, &decoded_byte, &xHigherPriorityTaskWoken);
             continue;
         }
         if (decoded_byte != SYNC_BYTE)
         {
             uint8_t is_valid = is_valid_manchester(manchester_encoded);
-            // log(WARNING, "Not synced - %s valid manchester", is_valid ? "is" : "is not");
 
             if (is_valid == 0)
             {
@@ -167,7 +104,7 @@ void receiver_process()
                 // check if decoded byte has 2 consecutive 0s in binary representation (at some point in string)
                 if (decoded_byte == 63 || decoded_byte == 159 || decoded_byte == 207 || decoded_byte == 231 || decoded_byte == 243 || decoded_byte == 249 || decoded_byte == 252)
                 {
-                    log(INFORMATION, "Correct bits but missing sequence. Number %d", decoded_byte);
+                    DEBUG_PRINT("Correct bits but missing sequence. Number %d", decoded_byte);
                     switch (decoded_byte)
                     {
                     case 63: // 01111111
@@ -193,59 +130,47 @@ void receiver_process()
                         break;
                     }
                 }
-                log(INFORMATION, "Waiting for %lu ms", delay);
+                DEBUG_PRINT("Waiting for %lu ms", delay);
                 vTaskDelay(delay / portTICK_PERIOD_MS);
             }
             continue;
         }
         else
         {
-            log(SUCCESS, "SYNCED");
+            DEBUG_PRINT("SYNCED");
             has_synced = 1;
-            
         }
-
-
-
-/*         // Assume message is being send
-        if (first_byte == 0)
-        {
-            log(INFORMATION, "Expecting message size");
-            first_byte = 1;
-            message_index = 0;
-            message_size = decoded_byte;
-            memset(message_from_sender, 0, MESSAGE_SIZE);
-        }
-
-        message_from_sender[message_index] = decoded_byte;
-        log(INFORMATION, "Got char: %c. I expect %d characters more", decoded_byte, MESSAGE_SIZE - message_index);
-        message_index++;
-
-        if (message_index == message_size + 1)
-        {
-            log(SUCCESS, "Message received: %s", message_from_sender);
-            message_index = 0;
-            has_synced = 0;
-        } */
-
     }
 }
 
-
 void reader_process()
 {
+    // Configure UART parameters
+    uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_APB,
+    };
+
+    // Install UART driver
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
+    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
+    uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0);
+
+    uint8_t received_bit;
     while (1)
     {
-        while (xSemaphoreTake(xMutex, 0) != pdTRUE)
+        // Wait for data from the queue
+        if (xQueueReceive(timer_data_queue, &received_bit, portMAX_DELAY))
         {
-            // Spinlock: wait until the mutex is available
-            taskYIELD();
+            int bytes_written = uart_write_bytes(UART_NUM_0, &received_bit, 1);
+            if (bytes_written < 0)
+            {
+                DEBUG_PRINT("UART write error: %d\n", bytes_written);
+            }
         }
-
-        // Read from shared_array
-        log(INFORMATION, "Reader read: %d", shared_char);
-        uart_write_bytes(UART_NUM, &shared_char, 1);
-        xSemaphoreGive(xMutex);
-        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
