@@ -1,32 +1,40 @@
 #include "protocol.h"
 #include <assert.h>
+#define IDEAL_THRESHOLD 3
 
-
-uint8_t process_stable_bits(uint8_t current_bit)
-{
-    static uint8_t stable_bit = 0xFF;
+int8_t process_stable_bits(uint8_t current_bit) {
+    static uint8_t saved_bit = 0xFF; // Initialize to an invalid state
+    static uint8_t last_bit = 0xFF;
     static uint8_t stable_count = 0;
+    static uint8_t threshold_diff = 0;
 
-    if (current_bit == stable_bit)
-    {
+    // Here we have got either 1111 or 0000
+    // Meaning the next bits can be (threshold - 1)
+    if(saved_bit == current_bit && threshold_diff == 0) {
+        threshold_diff = 1;
+        return -1;
+    }
+
+    if(current_bit == last_bit) {
         stable_count++;
-    }
-    else
-    {
-        stable_bit = current_bit;
+    } else {
+        last_bit = current_bit;
         stable_count = 1;
-        // printf(" ");
     }
 
-    if(stable_count >= 4){
-        stable_bit = 0xFF;
-        stable_count = 0;
-        return 1;
+    if(stable_count == (IDEAL_THRESHOLD - threshold_diff)) {
+        threshold_diff = 0; // Reset threshold_diff
+        uint8_t tmp = last_bit;
+        saved_bit = last_bit; // Save the stable bit
+        stable_count = 0; // Reset the stable count after processing
+        last_bit = 0xFF; // Reset last_bit to av
+        return tmp;
     }
 
-    return 0;
+    return -1; // Indicate that the bit is not stable yet
 
 }
+
 
 // Unit Test for process_stable_bits
 

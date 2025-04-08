@@ -100,8 +100,6 @@ void IRAM_ATTR timer_isr(void *arg)
     }
     else if (xQueueReceiveFromISR(xMessageQueue, &byte, NULL) == pdTRUE)
     {
-        // Start sending the message
-        printf("Sending bit: %d\n", byte);
         set_light_state(byte);
     }
     else
@@ -163,7 +161,7 @@ void isr_process() {
         .name = "periodic_timer",
     };
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 10000)); // 50 microseconds
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 6000)); // 50 microseconds
 
     while(1) {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -184,7 +182,7 @@ void read_process(void *param)
 {
         // Configure UART parameters
         uart_config_t uart_config = {
-            .baud_rate = 115200,
+            .baud_rate = 921600,
             .data_bits = UART_DATA_8_BITS,
             .parity = UART_PARITY_DISABLE,
             .stop_bits = UART_STOP_BITS_1,
@@ -195,11 +193,11 @@ void read_process(void *param)
         // Install UART driver
         ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
         ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
-        uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE, 0, NULL, 0);
+        uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE * 2, 2000, NULL, 0);
 
     while (1)
     {
-        uint32_t len = uart_read_bytes(UART_NUM, received_message_buffer, BUF_SIZE, 100 / portTICK_PERIOD_MS);
+        uint32_t len = uart_read_bytes(UART_NUM, received_message_buffer, BUF_SIZE, 1 / portTICK_PERIOD_MS);
         if (len > 0)
         {
             // First send flag to indicate that a message is being received

@@ -27,7 +27,7 @@
                 document.body.appendChild(progressBar);
 
                 const xhr = new XMLHttpRequest();
-                xhr.open('POST', 'http://localhost:3001/upload', true);
+                xhr.open('POST', 'http://localhost:3000/upload', true);
                 xhr.upload.onprogress = function(event) {
                     if (event.lengthComputable) {
                         const percentComplete = (event.loaded / event.total) * 100;

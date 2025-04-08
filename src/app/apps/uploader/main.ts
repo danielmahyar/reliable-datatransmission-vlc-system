@@ -6,11 +6,11 @@ import multer from 'multer';
 
 // Directory where your files are stored
 const app = express();
-const PORT = 3001;
+const PORT = 3000;
 const upload = multer()
 const port = new SerialPort({
   path: "COM4",
-  baudRate: 115200,
+  baudRate: 921600,
 }); 
 
 app.post('/upload', upload.single('image'), (req, res: any) => {
@@ -22,6 +22,8 @@ app.post('/upload', upload.single('image'), (req, res: any) => {
     packetSize: 32, // Default packet size is 32 bytes
   })
 
+  console.log(packets[0])
+
   res.status(200).json({
     message: 'Image uploaded successfully',
     packets: packets.length,
@@ -32,6 +34,7 @@ app.post('/upload', upload.single('image'), (req, res: any) => {
     await sendPacket(packet);
     await canSendNextPackage();
   });
+  console.log("Packets sent to serial port");
 
 })
 
