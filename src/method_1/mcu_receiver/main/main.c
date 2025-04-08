@@ -16,7 +16,7 @@
 #define BUF_SIZE (1024)
 #define SHARED_ARRAY_SIZE 100
 #define BUFFER_SIZE 1024
-#define DEBUG 1
+#define DEBUG 0
 
 #if DEBUG == 1
 #define DEBUG_PRINT(...) printf(__VA_ARGS__)
@@ -81,7 +81,7 @@ void receiver_process()
         {
             binary[i] = (decoded_byte >> i) & 1;
         }
-        DEBUG_PRINT("Decoded byte: %d - Binary: %d%d%d%d%d%d%d%d", decoded_byte, binary[7], binary[6], binary[5], binary[4], binary[3], binary[2], binary[1], binary[0]);
+        DEBUG_PRINT("Decoded byte: %d - Binary: %d%d%d%d%d%d%d%d \n", decoded_byte, binary[7], binary[6], binary[5], binary[4], binary[3], binary[2], binary[1], binary[0]);
         if (has_synced == 1)
         {
 
@@ -147,7 +147,7 @@ void reader_process()
 {
     // Configure UART parameters
     uart_config_t uart_config = {
-        .baud_rate = 115200,
+        .baud_rate = 921600,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
