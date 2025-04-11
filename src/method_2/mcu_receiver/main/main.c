@@ -17,7 +17,10 @@
 #include "esp_timer.h" // Include for timestamp functionality
 
 #define UART_NUM UART_NUM_0 // Use UART1
-#define BUF_SIZE (1024)
+#define BUF_SIZE (8192)
+#define UART_RX_BUFFER_SIZE BUF_SIZE * 2 // Increase RX buffer size
+#define UART_TX_BUFFER_SIZE BUF_SIZE * 2 // Increase TX buffer size
+
 #define DEBUG 0 // Enable debug mode
 
 #if DEBUG == 1
@@ -242,7 +245,21 @@ esp_timer_handle_t periodic_timer;
 
 void timer_data_process()
 {
-    uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE * 2, 1000, NULL, 0);
+      // Configure UART parameters
+      uart_config_t uart_config = {
+        .baud_rate = 2000000,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_APB,
+    };
+
+    // Install UART driver
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
+    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
+    uart_driver_install(UART_NUM, UART_RX_BUFFER_SIZE, UART_TX_BUFFER_SIZE, 1000, NULL, 1);
+
     uint8_t received_bit;
     while (1)
     {
@@ -250,7 +267,7 @@ void timer_data_process()
         if (xQueueReceive(timer_data_queue, &received_bit, portMAX_DELAY))
         {
             // Process the received bit
-            // DEBUG_PRINT("Sending Packet\n");
+            // DEBUG_PRINT("\nSending Packet\n");
             // printf("%d",received_bit);
             int bytes_written = uart_write_bytes(UART_NUM_0, &received_bit, 1);
             if (bytes_written < 0)
@@ -262,9 +279,15 @@ void timer_data_process()
 }
 
 uint8_t count = 0;
-
+static uint8_t busy_flag = 0;
 void IRAM_ATTR timer_isr(void *arg)
 {
+    if(busy_flag == 1)
+    {
+        printf("Busy flag is set, skipping ISR\n");
+        return;
+    }
+    busy_flag = 1;
     uint8_t current_bit = read_env_bit();
 
     #if DEBUG == 1
@@ -279,7 +302,7 @@ void IRAM_ATTR timer_isr(void *arg)
     #endif
 
     int8_t res = process_stable_bits(current_bit);
-
+    busy_flag = 0;
 
 
     if (res == -1)
@@ -324,6 +347,7 @@ void IRAM_ATTR timer_isr(void *arg)
         }
         uint8_t decoded_byte = decode_manchester_byte(received_buffer);
 
+        //uart_write_bytes(UART_NUM_0, &decoded_byte, 1);
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         xQueueSendFromISR(timer_data_queue, &decoded_byte, &xHigherPriorityTaskWoken);
 
@@ -339,27 +363,12 @@ void app_main(void)
 {
     esp_task_wdt_deinit();
 
-        // Configure UART parameters
-        uart_config_t uart_config = {
-            .baud_rate = 921600,
-            .data_bits = UART_DATA_8_BITS,
-            .parity = UART_PARITY_DISABLE,
-            .stop_bits = UART_STOP_BITS_1,
-            .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-            .source_clk = UART_SCLK_APB,
-        };
-    
-        // Install UART driver
-        ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
-        ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
-        
-
     setup();
 
     log(INFORMATION, "Setup complete");
 
     // Create the queue for transferring data from ISR
-    timer_data_queue = xQueueCreate(10240, sizeof(uint8_t));
+    timer_data_queue = xQueueCreate(50000, sizeof(uint8_t));
     if (timer_data_queue == NULL)
     {
         log(FAILURE, "Failed to create queue");
@@ -388,7 +397,7 @@ void isr_process()
 
     };
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 2000)); // 50 microseconds
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 133)); // 50 microseconds
 
     while (1)
     {

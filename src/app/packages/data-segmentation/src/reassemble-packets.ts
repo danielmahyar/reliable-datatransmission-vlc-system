@@ -85,7 +85,7 @@ export function reassemblePacketWithErrors(packet: Buffer): { data: Buffer; bitE
   }
 
   let bitErrors = 0;
-  let totalBits = 0;
+  let totalBits = 4 * 8; // Header size in bits (4 bytes * 8 bits/byte)
   const dataSegment = Buffer.alloc(lengthOfPacket / 2); // Each byte has 2 CRC bits
 
   for (let i = 0; i < lengthOfPacket / 2; i++) {
