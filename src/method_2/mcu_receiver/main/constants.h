@@ -3,7 +3,7 @@
 // Hardware constants
 #define LED_GPIO 12
 #define THRESHOLD 3800 
-#define SAMPLING_RATE 10
+#define SAMPLING_RATE 8000
 #define OFFSET_DELAY 9
 #define NODE_ID 2
 

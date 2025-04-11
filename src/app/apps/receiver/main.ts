@@ -6,16 +6,19 @@ import {
   reassemblePacket,
   reassemblePacketWithErrors,
 } from "@repo/data-segmentation/reassemble"; // Import your utility function
+import { writeFileSync } from "fs";
+import { time } from "console";
 
 // Directory where your files are stored
 const FILES_DIRECTORY = path.join(process.cwd(), "public");
 const app = express();
 const PORT = 3002;
 
+
 const port = new SerialPort({
-  path: "COM3",
-  baudRate: 921600,
-});
+  path: "COM4",
+    baudRate: 2000000,
+})
 
 // Make temporary buffer for bit data
 const tempBuffer: Buffer[] = [];
@@ -23,7 +26,13 @@ const eventEmitter = new EventEmitter();
 let totalBits = 0;
 let totalErrors = 0;
 let flagCount = 0;
-const startTime = Date.now();
+const startTime = Date.now(); 
+let last_timestamp: any = null;
+
+const now = new Date();
+const fileName = `${now.getHours()}-${now.getMinutes()}-${now.getDate()}-${now.getMonth() + 1}.csv`;
+
+writeFileSync(path.join(process.cwd(), "logs", fileName), "Time,Total Bits,Total Errors,BIT Error Rate,Bitrate\n");
 
 port.on("data", (data: Buffer) => {
   console.log("Data received:", data);
@@ -42,22 +51,25 @@ port.on("data", (data: Buffer) => {
       const reassembled = reassemblePacketWithErrors(Buffer.concat(tempBuffer));
       totalBits += reassembled.totalBits;
       totalErrors += reassembled.bitErrors;
-
+      const noww = Date.now();
       // Calculate the elapsed time in seconds
-      const elapsedTime = (Date.now() - startTime) / 1000;
-
+      const elapsedTime = (noww - last_timestamp) / 1000;
+      last_timestamp = noww;
       // Calculate the bitrate (bits per second)
-      const bitrate = totalBits / elapsedTime;
+      const bitrate = reassembled.totalBits / elapsedTime;
       const bitErrorRate = totalErrors / totalBits;
 
       console.log(`Packet processed. Total bits: ${totalBits}, Total errors: ${totalErrors}`);
       console.log(`Bit Error Rate so far: ${bitErrorRate}`);
       console.log(`Bitrate: ${bitrate.toFixed(2)} bits/second`);
-      /*       const reassembled = reassemblePacket(Buffer.concat(tempBuffer)); */
+      writeFileSync(path.join(process.cwd(), "logs", fileName), `${(noww - startTime) / 1000 },${totalBits},${totalErrors},${bitErrorRate},${bitrate}\n`, { flag: 'a' });
       eventEmitter.emit("dataReceived", reassembled.data);
       tempBuffer.length = 0;
     } 
     return;
+  }
+  if(tempBuffer.length === 0 && last_timestamp === null) {
+    last_timestamp = Date.now();
   }
 
   tempBuffer.push(data);
@@ -97,7 +109,7 @@ app.get("/files/:filename", (req, res) => {
 
   eventEmitter.on("dataReceived", onDataReceived);
   eventEmitter.on("dataEnd", onDataEnd);
-  
+
 });
 
 // Start the server
