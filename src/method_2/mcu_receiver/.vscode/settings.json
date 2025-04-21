@@ -30,6 +30,6 @@
     "idf.customExtraVars": {
         "IDF_TARGET": "esp32"
     },
-    "idf.pythonInstallPath": "C:\\Espressif\\tools\\idf-python\\3.11.2\\python.exe",
+    "idf.pythonInstallPath": "/opt/homebrew/bin/python3",
     "idf.portWin": "COM4"
 }

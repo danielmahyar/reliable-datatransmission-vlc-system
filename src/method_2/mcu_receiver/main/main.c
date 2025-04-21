@@ -21,7 +21,7 @@
 #define UART_RX_BUFFER_SIZE BUF_SIZE * 2 // Increase RX buffer size
 #define UART_TX_BUFFER_SIZE BUF_SIZE * 2 // Increase TX buffer size
 
-#define DEBUG 0 // Enable debug mode
+#define DEBUG 0  // Enable debug mode
 
 #if DEBUG == 1
 #define DEBUG_PRINT(...) printf(__VA_ARGS__)
@@ -397,7 +397,7 @@ void isr_process()
 
     };
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 133)); // 50 microseconds
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 2666)); // 50 microseconds
 
     while (1)
     {

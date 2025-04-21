@@ -9,7 +9,7 @@ const app = express();
 const PORT = 3000;
 const upload = multer()
 const port = new SerialPort({
-  path: "COM3",
+  path: "/dev/tty.usbserial-02896EF6",
   baudRate: 1000000,
 }); 
 
@@ -19,7 +19,7 @@ app.post('/upload', upload.single('image'), (req, res: any) => {
   }
 
   const packets = segmentFileIntoPackets(req.file.buffer, {
-    packetSize: 128, // Default packet size is 32 bytes
+    packetSize: 32, // Default packet size is 32 bytes
   })
 
   console.log(packets)
