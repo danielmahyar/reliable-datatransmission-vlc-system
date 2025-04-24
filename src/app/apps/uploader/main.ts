@@ -9,7 +9,7 @@ const app = express();
 const PORT = 3000;
 const upload = multer()
 const port = new SerialPort({
-  path: "/dev/tty.usbserial-02896EF6",
+  path: "COM4",
   baudRate: 1000000,
 }); 
 

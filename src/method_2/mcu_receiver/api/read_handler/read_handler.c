@@ -18,7 +18,7 @@ void setup_read_handler(){
 
 uint8_t read_env_bit(){
     uint32_t val = read_adc();
-    printf("ADC Reading: %lu \n", val);
+    // printf("ADC Reading: %lu \n", val);
     return val > calculatedThreshold;
 }
 

@@ -16,8 +16,8 @@ const PORT = 3002;
 
 
 const port = new SerialPort({
-  path: "/dev/tty.usbserial-0283CEF2",
-    baudRate: 2000000,
+  path: "COM4",
+    baudRate: 1000000,
 })
 
 // Make temporary buffer for bit data
