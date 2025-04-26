@@ -5,7 +5,7 @@ import os
 # Initialize data for method1 and method2
 x1, y1 = [], []
 x2, y2 = [], []
-
+plt.rcParams.update({'font.size': 17})
 # Process files in method1
 files_method1 = os.listdir('./ber-distance/method1')
 for file in files_method1:
@@ -35,7 +35,7 @@ for file in files_method2:
 x2, y2 = zip(*sorted(zip(x2, y2)))
 
 # 📈 Plotting
-plt.figure(figsize=(8, 6))
+plt.figure(figsize=(10, 6))
 
 # Plot method1
 plt.scatter(x1, y1, color='dodgerblue', edgecolors='black', s=100)
@@ -48,12 +48,12 @@ plt.plot(x2, y2, color='red', linestyle='dashed', label="Method 2 (Line)")
 plt.title("BER vs Distance [Method 1 & Method 2]")
 plt.xlabel("Distance (cm)")
 plt.ylabel("Bit Error Rate (BER)")
-plt.ylim(0)
+plt.ylim(-0.01)
 plt.grid(True)
 plt.legend()  # Add a legend to distinguish methods
 plt.tight_layout()
 
 # 💾 Optional: Save the figure as SVG
-plt.savefig("ber_vs_distance_comparison.svg", format='svg', bbox_inches='tight')
+plt.savefig("ber_vs_distance_comparison.pdf", format='pdf', bbox_inches='tight')
 
 plt.show()

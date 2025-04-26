@@ -161,7 +161,7 @@ void isr_process() {
         .name = "periodic_timer",
     };
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 10000)); // 50 microseconds
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 500)); // 50 microseconds
 
     while(1) {
         vTaskDelay(1000 / portTICK_PERIOD_MS);

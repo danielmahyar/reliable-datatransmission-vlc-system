@@ -1,19 +1,112 @@
-/* Radix Slate Color Theme */
-:root {
-    --color-background: hsl(240, 10%, 98%);
-    --color-foreground: hsl(240, 10%, 10%);
-    --color-border: hsl(240, 10%, 80%);
+/* http://meyerweb.com/eric/tools/css/reset/ 
+   v2.0 | 20110126
+   License: none (public domain)
+*/
+
+html, body, div, span, applet, object, iframe,
+h1, h2, h3, h4, h5, h6, p, blockquote, pre,
+a, abbr, acronym, address, big, cite, code,
+del, dfn, em, img, ins, kbd, q, s, samp,
+small, strike, strong, sub, sup, tt, var,
+b, u, i, center,
+dl, dt, dd, ol, ul, li,
+fieldset, form, label, legend,
+table, caption, tbody, tfoot, thead, tr, th, td,
+article, aside, canvas, details, embed, 
+figure, figcaption, footer, header, hgroup, 
+menu, nav, output, ruby, section, summary,
+time, mark, audio, video {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	font-size: 100%;
+	font: inherit;
+	vertical-align: baseline;
+}
+/* HTML5 display-role reset for older browsers */
+article, aside, details, figcaption, figure, 
+footer, header, hgroup, menu, nav, section {
+	display: block;
+}
+body {
+	line-height: 1;
+}
+ol, ul {
+	list-style: none;
+}
+blockquote, q {
+	quotes: none;
+}
+blockquote:before, blockquote:after,
+q:before, q:after {
+	content: '';
+	content: none;
+}
+table {
+	border-collapse: collapse;
+	border-spacing: 0;
+}
+
+h1 {
+    font-size: 34px;
+    font-weight: 700;
 }
 
 body {
     margin: 0;
     font-family: Arial, sans-serif;
-    background-color: var(--color-background);
-    color: var(--color-foreground);
+    background-color: #071844;
+    color: white;
     display: flex;
     justify-content: center;
     align-items: center;
     height: 100vh;
+    width: 100vw;
+    position: relative;
+}
+
+.header {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    top: 10px;
+    left: 10px;
+    right: 0;
+    padding: 20px;
+    gap: 10px;
+    text-align: center;
+    font-size: 24px;
+    span {
+        font-weight: medium;
+    }
+}
+
+.footer {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    bottom: 10px;
+    left: 0;
+    right: 0;
+    padding: 20px;
+    gap: 10px;
+    text-align: center;
+    font-size: 14px;
+    opacity: 0.7;
+}
+
+.main-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    max-width: 600px;
+    height: 100%;
 }
 
 img {
@@ -22,4 +115,42 @@ img {
     max-width: 90%;
     max-height: 90%;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.file-input-area {
+    width: 300px;
+    height: 300px;
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    cursor: pointer;
+    margin: 20px auto;
+    transition: background-color 0.3s ease;
+}
+
+.file-input-area.dragover {
+    background-color: #f0f8ff;
+    border-color: #007bff;
+}
+
+.file-input-area p {
+    margin: 0;
+    font-size: 16px;
+    color: white;
+    font-weight: bold;
+}
+
+button {
+    background-color: white;
+    color: black;
+    border: 0.5px solid #000; 
+    border-radius: 4px;
+    padding: 10px 20px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
 }

@@ -6,6 +6,7 @@ x = []
 y = []
 last_numbers = []
 
+plt.rcParams.update({'font.size': 17})
 # Loop through all the files of ./method2 using os.listdir
 files = os.listdir('./method2')
 for file in files:
@@ -25,11 +26,11 @@ for number, file in sorted(last_numbers):
 # Then take the last number of the csv file name as the x-axis and the BER from the csv as the y-axis
 
 # 📈 Plotting
-plt.figure(figsize=(8, 6))
+plt.figure(figsize=(10, 6))
 plt.scatter(x, y, color='dodgerblue', edgecolors='black', s=100)
-plt.plot(x, y, color='blue', linestyle='dashed', label="BER")  # Add lines between points
+plt.plot(x, y, color='red', linestyle='dashed', label="Method 2")  # Add lines between points
 
-plt.title("BER vs Transmission Rate  [Method 2]")
+plt.title("BER vs Transmission Rate ")
 plt.xlabel("Transmission Rate (Hz)")
 plt.ylabel("Bit Error Rate (BER)")
 plt.ylim(0)
@@ -38,6 +39,6 @@ plt.grid(True)
 plt.tight_layout()
 
 # 💾 Optional: Save the figure as SVG
-plt.savefig("ber_vs_transmission_rate.svg", format='svg', bbox_inches='tight')
+plt.savefig("ber_vs_transmission_rate.pdf", format='pdf', bbox_inches='tight')
 
 plt.show()

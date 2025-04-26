@@ -77,7 +77,7 @@ port.on("data", (data: Buffer) => {
 
 app.get("/", (req, res) => {
   // Serve index.html
-  res.sendFile(path.join(process.cwd(), "index.html"));
+  res.sendFile(path.join(process.cwd(), "ui", "index.html"));
 });
 
 
@@ -111,6 +111,9 @@ app.get("/files/:filename", (req, res) => {
   eventEmitter.on("dataEnd", onDataEnd);
 
 });
+
+// Host static files from the ui directory
+app.use("/ui", express.static(path.join(process.cwd(), 'ui')));
 
 // Start the server
 app.listen(PORT, () => {

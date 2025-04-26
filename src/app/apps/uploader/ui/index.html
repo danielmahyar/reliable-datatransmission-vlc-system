@@ -4,48 +4,82 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VLC Uploader</title>
-    <link rel="stylesheet" href="http://localhost:3001/ui/styles.css">
+    <link rel="stylesheet" href="http://localhost:3000/ui/styles.css">
 </head>
 <body>
-    <main>
-        <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="previewImage(event)">
-        <label for="fileInput" style="cursor: pointer; padding: 10px; background-color: var(--color-border); color: var(--color-foreground); border-radius: 5px;">Choose Image</label>
-        <button onclick="uploadImage()">Send to server</button>
+    <div class="header">
+        <h1>VLC Uploader</h1>
+        <h2>Reliable Data Transmission through a VLC system</h2>
+    </div>
+    <main class="main-content">
+        <div id="msg-ctn"></div>
+        <div id="fileInputContainer">
+            <div id="fileInputArea" class="file-input-area">
+                <p>Drag and drop an image here<br>or click to select</p>
+            </div>
+            <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="previewImage(event)">
+        </div>
+        <button id="btn" style="display: none;" onclick="uploadImage()">Send to server</button>
     </main>
+    <div class="footer">
+        <p>Bachelor - Reliable Data Transmission through a VLC system</p>
+        <p>Developed by Daniel Cargar Mahyar [s224797]</p>
+        <p>Version 1.0</p>
+    </div>
     <script>
+        const fileInputContainer = document.getElementById('fileInputContainer');
+        const fileInputArea = document.getElementById('fileInputArea');
+        const fileInput = document.getElementById('fileInput');
+        const btn = document.getElementById('btn');
+
+        // Handle click on the drag-and-drop area
+        fileInputArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Handle drag-and-drop events
+        fileInputArea.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            fileInputArea.classList.add('dragover');
+        });
+
+        fileInputArea.addEventListener('dragleave', () => {
+            fileInputArea.classList.remove('dragover');
+        });
+
+        fileInputArea.addEventListener('drop', (event) => {
+            event.preventDefault();
+            fileInputArea.classList.remove('dragover');
+            const file = event.dataTransfer.files[0];
+            if (file) {
+                fileInput.files = event.dataTransfer.files; // Assign the dropped file to the input
+                previewImage({ target: { files: [file] } });
+            }
+        });
+
         function uploadImage() {
             const fileInput = document.getElementById('fileInput');
+            const msgCtn = document.getElementById('msg-ctn');
             const file = fileInput.files[0];
             if (file) {
                 const formData = new FormData();
                 formData.append('image', file);
 
-                // Show the progress of the upload
-                const progressBar = document.createElement('progress');
-                progressBar.value = 0;
-                progressBar.max = 100;
-                document.body.appendChild(progressBar);
-
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', 'http://localhost:3000/upload', true);
-                xhr.upload.onprogress = function(event) {
-                    if (event.lengthComputable) {
-                        const percentComplete = (event.loaded / event.total) * 100;
-                        progressBar.value = percentComplete;
-                    }
-                };
-                xhr.onload = function() {
-                    if (xhr.status === 200) {
-                        console.log('Upload complete:', xhr.responseText);
-                        progressBar.value = 100; // Set to 100% on completion
-                    } else {
-                        console.error('Upload failed:', xhr.statusText);
-                    }
-                    document.body.removeChild(progressBar); // Remove progress bar after upload
-                };
+
                 xhr.onerror = function() {
                     console.error('Upload error:', xhr.statusText);
                     document.body.removeChild(progressBar); // Remove progress bar on error
+                };
+                xhr.onloadend = function() {
+                    if (xhr.status === 200) {
+                        msgCtn.innerHTML = '<p>Image uploaded successfully!</p>';
+                    } else {
+                        msgCtn.innerHTML = '<p>Upload failed. Please try again.</p>';
+                    }
+                    document.getElementById('previewImage').remove(); // Remove the preview image after upload
+                    document.getElementById('btn').remove();
                 };
                 xhr.send(formData);
 
@@ -59,8 +93,12 @@
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     const img = document.createElement('img');
+                    img.id = 'previewImage';
                     img.src = e.target.result;
-                    document.body.appendChild(img);
+                    fileInputContainer.appendChild(img);
+                    fileInputArea.style.display = 'none'; // Hide the drag-and-drop area after selecting an image
+                    img.style.maxWidth = '100%'; // Set max width for the image
+                    btn.style.display = 'block'; // Show the upload button
                 };
                 reader.readAsDataURL(file);
             }

@@ -1,15 +1,14 @@
 import express from 'express';
 import path from 'path';
 import { SerialPort } from 'serialport';
-import { segmentFileIntoPackets } from '@repo/data-segmentation/segment'; // Import your utility function
+import { segmentFileIntoPackets } from '@repo/data-segmentation/segment'; 
 import multer from 'multer';
 
-// Directory where your files are stored
 const app = express();
 const PORT = 3000;
 const upload = multer()
 const port = new SerialPort({
-  path: "COM4",
+  path: "COM3",
   baudRate: 1000000,
 }); 
 
@@ -19,10 +18,9 @@ app.post('/upload', upload.single('image'), (req, res: any) => {
   }
 
   const packets = segmentFileIntoPackets(req.file.buffer, {
-    packetSize: 32, // Default packet size is 32 bytes
+    packetSize: 32,
   })
 
-  console.log(packets)
 
   res.status(200).json({
     message: 'Image uploaded successfully',
@@ -35,7 +33,6 @@ app.post('/upload', upload.single('image'), (req, res: any) => {
     await (new Promise(resolve => setTimeout(resolve, 100))); // Wait for 100ms before sending the next packet
     await canSendNextPackage();
   });
-  console.log("Packets sent to serial port");
 
 })
 
@@ -55,7 +52,6 @@ app.listen(PORT, () => {
 });
 
 async function sendPacket(packet: Buffer): Promise<boolean> {
-  // console.log("Sending packet");
   return port.write(packet);
 }
 
