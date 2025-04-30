@@ -1,0 +1,25 @@
+{
+  "name": "experiments",
+  "version": "1.0.0",
+  "main": "main.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon --no-warnings --exec node --loader ts-node/esm ./main.ts",
+    "start": "npx tsc && node ./dist/main.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": ""
+  },
+  "dependencies": {
+    "@serialport/parser-byte-length": "^13.0.0",
+    "@serialport/parser-readline": "^13.0.0",
+    "nodemon": "^3.1.9",
+    "serialport": "^13.0.0",
+    "@serialport/binding-mock": "10.2.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.1",
+    "@types/multer": "^1.4.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  }
+}

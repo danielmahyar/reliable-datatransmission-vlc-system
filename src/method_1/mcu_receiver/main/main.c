@@ -11,6 +11,7 @@
 #include "driver/uart.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "esp_task_wdt.h"
 
 #define UART_NUM UART_NUM_0 // Use UART1
 #define BUF_SIZE (1024)
@@ -31,7 +32,8 @@ void receiver_process();
 void reader_process();
 
 void app_main(void)
-{
+{   
+    esp_task_wdt_deinit();
     setup();
     DEBUG_PRINT("Setup complete");
 
@@ -147,7 +149,7 @@ void reader_process()
 {
     // Configure UART parameters
     uart_config_t uart_config = {
-        .baud_rate = 921600,
+        .baud_rate = 1000000,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,

@@ -31,20 +31,19 @@ void app_main(void)
 
     esp_task_wdt_deinit();
 
-        // Configure UART parameters
-        uart_config_t uart_config = {
-            .baud_rate = 921600,
-            .data_bits = UART_DATA_8_BITS,
-            .parity = UART_PARITY_DISABLE,
-            .stop_bits = UART_STOP_BITS_1,
-            .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-            .source_clk = UART_SCLK_APB,
-        };
-    
-        // Install UART driver
-        ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
-        ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
+    // Configure UART parameters
+    uart_config_t uart_config = {
+        .baud_rate = 1000000,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_APB,
+    };
 
+    // Install UART driver
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
+    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
 
     setup();
     log(INFORMATION, "Setup complete");
@@ -76,10 +75,13 @@ void sender_process(void *param)
     // Send sync continuously
     while (1)
     {
-        if(xQueueReceive(xMessageQueue, &byte, 1 / portTICK_PERIOD_MS) == pdTRUE){
+        if (xQueueReceive(xMessageQueue, &byte, 1 / portTICK_PERIOD_MS) == pdTRUE)
+        {
             set_light_state(byte);
             vTaskDelay((SAMPLING_RATE) / portTICK_PERIOD_MS);
-        } else {
+        }
+        else
+        {
             encode_manchester_byte(data, SYNC_BYTE);
             for (uint8_t j = 0; j < BYTE_MANCHESTER_SIZE; j++)
             {
@@ -102,7 +104,6 @@ void read_process(void *param)
         if (len > 0)
         {
             // First send flag to indicate that a message is being received
-
 
             for (uint32_t i = 0; i < len; i++)
             {

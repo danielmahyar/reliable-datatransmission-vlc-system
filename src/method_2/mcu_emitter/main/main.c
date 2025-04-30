@@ -19,7 +19,7 @@
 #define UART_NUM UART_NUM_0 // Use UART1
 #define TXD_PIN (GPIO_NUM_17)
 #define RXD_PIN (GPIO_NUM_16)
-#define BUF_SIZE (1024)
+#define BUF_SIZE (8192)
 #define SEND_RANDOM 0
 
 /*
@@ -43,7 +43,7 @@ typedef enum
 NodeState node_state = UNDEFINED;
 
 char message_buffer[MESSAGE_SIZE] = "VLC MESSAGE :)";
-char received_message_buffer[1024] = {0};
+char received_message_buffer[BUF_SIZE] = {0};
 uint32_t received_message_length = 0;
 const uint8_t ACK_BYTE = 0x7E;
 
@@ -126,7 +126,7 @@ void app_main(void)
     setup();
     log(INFORMATION, "Setup complete");
 
-    xMessageQueue = xQueueCreate(20000, sizeof(char)); // Queue for 16 bytes
+    xMessageQueue = xQueueCreate(50000, sizeof(char)); // Queue for 16 bytes
     if (xMessageQueue == NULL)
     {
         log(FAILURE, "Queue creation failed");
@@ -161,7 +161,7 @@ void isr_process() {
         .name = "periodic_timer",
     };
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 6000)); // 50 microseconds
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 500)); // 50 microseconds
 
     while(1) {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -182,7 +182,7 @@ void read_process(void *param)
 {
         // Configure UART parameters
         uart_config_t uart_config = {
-            .baud_rate = 921600,
+            .baud_rate = 1000000,
             .data_bits = UART_DATA_8_BITS,
             .parity = UART_PARITY_DISABLE,
             .stop_bits = UART_STOP_BITS_1,
@@ -193,7 +193,7 @@ void read_process(void *param)
         // Install UART driver
         ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
         ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
-        uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE * 2, 2000, NULL, 0);
+        uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE * 2, 2000, NULL, ESP_INTR_FLAG_IRAM);
 
     while (1)
     {

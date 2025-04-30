@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VLC Receiver</title>
+    <link rel="stylesheet" href="http://localhost:3002/ui/styles.css">
+</head>
+
+<body>
+    <div class="header">
+        <h1>VLC Receiver</h1>
+        <h2>Reliable Data Transmission through a VLC system</h2>
+    </div>
+    <main class="main-content">
+
+        <div class="image-container">
+            <div class="spinner" id="spinner"></div>
+            <div class="error-icon" id="errorIcon" style="display: none;">❌</div>
+            <img src="http://localhost:3002/files/test.jpg" alt="Description" id="image">
+        </div>
+
+    </main>
+    <div class="footer">
+        <p>Bachelor - Reliable Data Transmission through a VLC system</p>
+        <p>Developed by Daniel Cargar Mahyar [s224797]</p>
+        <p>Version 1.0</p>
+    </div>
+    <script defer>
+        const image = document.getElementById('image');
+        const spinner = document.getElementById('spinner');
+        const errorIcon = document.getElementById('errorIcon');
+
+        // Show the image and hide the spinner once the image is loaded
+        image.onload = () => {
+            spinner.style.display = 'none';
+            errorIcon.style.display = 'none';
+            image.style.display = 'block';
+        };
+
+        // Handle image loading errors
+        image.onerror = () => {
+            spinner.style.display = 'none';
+            errorIcon.style.display = 'block';
+        };
+    </script>
+</body>
+
+</html>
