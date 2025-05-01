@@ -21,7 +21,7 @@ plt.xlabel("Lux Level")
 plt.ylabel("Bit Error Rate (BER)")
 plt.xticks(lux_values)  # Ensure the x-axis shows 1 and 500
 plt.grid(axis='y', linestyle='--', alpha=0.7)
-
+plt.legend()
 # Show the plot
 plt.tight_layout()
 plt.savefig("ber_comparison_lux.pdf", format='pdf', bbox_inches='tight')
