@@ -13,16 +13,16 @@ plt.rcParams.update({'font.size': 17})
 
 # 📊 Plotting
 plt.figure(figsize=(10, 6))
-plt.bar(lux_values, ber_values, color=['blue', 'orange'], width=100)
+plt.bar(lux_values, ber_values, color=['blue', 'orange'], width=100, label=['Without flickering', 'With flickering'])
 
 # Add labels and title
 plt.title("BER when flickering")
-plt.xlabel("Lux Level")
+plt.xlabel("Lux Level of the light source (lux)")
 plt.ylabel("Bit Error Rate (BER)")
 plt.xticks(lux_values)  # Ensure the x-axis shows 1 and 500
 plt.grid(axis='y', linestyle='--', alpha=0.7)
-plt.legend()
+plt.legend()  # Ensure legend is displayed
 # Show the plot
 plt.tight_layout()
-plt.savefig("ber_comparison_lux.pdf", format='pdf', bbox_inches='tight')
+plt.savefig("ber_comparison_lux.png", format='png', bbox_inches='tight')
 plt.show()

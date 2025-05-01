@@ -14,8 +14,8 @@ const receiver = new SerialPort({
 
 const eventEmitter = new EventEmitter();
 let startReading = false;
-const EXPERIMENT_NAME = "/3";
-const FILES_DIRECTORY = "./ber-transrate/method2/1500";
+const EXPERIMENT_NAME = "/2";
+const FILES_DIRECTORY = "./test";
 
 // Check if the directory exists, if not create it
 if (!existsSync(FILES_DIRECTORY)) {
@@ -35,7 +35,7 @@ let skip = 0; // Flag to skip the first packet
 // No errors up to this point means we have a connection
 async function startTest() {
   let index = 0;
-  const bitstreams = generateRandomBitstreams(1000); // Generate 100 random bitstreams
+  const bitstreams = generateRandomBitstreams(100000); // Generate 100 random bitstreams
   console.log("Bitstreams generated:", bitstreams.length);
   receiver.on("data", (data: Buffer) => {
     eventEmitter.emit("dataReceived", data);
@@ -107,7 +107,7 @@ function generateRandomBitstreams(length: number): Buffer[] {
   const bitstreams: Buffer[] = [];
 
   for (let i = 0; i < length; i++) {
-    const randomBitstream = Buffer.alloc(1, Math.floor(Math.random() * 256));
+    const randomBitstream = Buffer.from([0x7e]) // Buffer.alloc(1, Math.floor(Math.random() * 256));
     bitstreams.push(randomBitstream);
   }
 
