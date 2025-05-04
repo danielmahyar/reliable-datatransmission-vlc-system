@@ -20,7 +20,7 @@
 #define TXD_PIN (GPIO_NUM_17)
 #define RXD_PIN (GPIO_NUM_16)
 #define BUF_SIZE (8192)
-#define SEND_RANDOM 0
+#define SEND_RANDOM 1
 
 /*
  *  sync(1) -> Node 2 (assuming node 2 is not trying to send anything at the moment)
@@ -65,6 +65,7 @@ uint8_t buffer_index = 0;
 uint8_t rnd = 0;
 
 bool sending_buffer_1 = true;
+bool has_sent_sync = false;
 
 void IRAM_ATTR timer_isr(void *arg)
 {
@@ -78,9 +79,16 @@ void IRAM_ATTR timer_isr(void *arg)
 
     if (buffer_index == 16)
     {
+        if (has_sent_sync == false) {
+           rnd = 0; 
+           has_sent_sync = true; // Set the flag to true after sending the first buffer
+        } else {
+
+            rnd = esp_random() % 3 + 1; // Randomly select a buffer
+            printf("Random buffer: %d\n", rnd);
+            has_sent_sync = false; // Reset the flag for the next cycle
+        }
         buffer_index = 0;
-        rnd = esp_random() % 4; // Randomly select a buffer
-        printf("Random buffer: %d\n", rnd);
     }
 
 #else
@@ -143,10 +151,8 @@ void app_main(void)
 
 
 
-    xTaskCreatePinnedToCore(isr_process, "handle_isr", 4096, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(isr_process, "handle_isr", 4096, NULL, configMAX_PRIORITIES - 1, NULL, 0);
     xTaskCreatePinnedToCore(read_process, "handle_reading_logic", 4096, NULL, 5, NULL, 1);
-    // xTaskCreatePinnedToCore(sender_process, "handle_sending_logic", 4096, NULL, 5, NULL, 0);
-    // xTaskCreatePinnedToCore(send_health_process, "handle_send_health", 4096, NULL, 5, NULL, 1);
 
     while (1)
     {
@@ -161,7 +167,7 @@ void isr_process() {
         .name = "periodic_timer",
     };
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 174)); // 50 microseconds
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 1000)); // 50 microseconds
 
     while(1) {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
