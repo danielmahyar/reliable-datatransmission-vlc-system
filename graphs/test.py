@@ -9,6 +9,7 @@ y = []
 
 list = []
 
+plt.rcParams.update({'font.size': 17})
 # For each folder, there will be 3 csv files called 1.csv, 2.csv, and 3.csv
 # Each csv file will have the same number of rows and columns, so we can use the first one to get the shape
 for folder in folders:
@@ -60,6 +61,7 @@ plt.errorbar(
     label='BER Measurements'
 )
 plt.xscale('log')
+# plt.xlim(0, 1000)
 # Connect the points with a line (optional)
 plt.plot(transmission_rates, ber_mean, 'b--', alpha=0.7)
 
@@ -70,8 +72,8 @@ plt.ylabel('Bit Error Rate (BER)')
 plt.grid(True, which="both", ls="--", alpha=0.7)
 
 # Add a legend
-plt.legend()
-plt.savefig("ber_vs_transmission_rate_with_error_bars.png", format='png', bbox_inches='tight')
+# plt.legend()
+plt.savefig("ber_vs_transmission_rate_with_error_bars.pdf", format='pdf', bbox_inches='tight')
 
 
 # Display the plot

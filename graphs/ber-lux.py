@@ -24,5 +24,5 @@ plt.grid(axis='y', linestyle='--', alpha=0.7)
 plt.legend()  # Ensure legend is displayed
 # Show the plot
 plt.tight_layout()
-plt.savefig("ber_comparison_lux.png", format='png', bbox_inches='tight')
+plt.savefig("ber_comparison_lux.pdf", format='pdf', bbox_inches='tight')
 plt.show()

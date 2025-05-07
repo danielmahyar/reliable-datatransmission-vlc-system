@@ -21,7 +21,7 @@ plt.xlabel("Time (s)")
 plt.ylabel("Bitrate (bits/s)")
 plt.legend()
 plt.grid(True)
-plt.xlim(0, 30)  # Set x-axis limit to 0-100 seconds
+# plt.xlim(0, 30)  # Set x-axis limit to 0-100 seconds
 plt.ylim(0,3000)
 plt.tight_layout()
 

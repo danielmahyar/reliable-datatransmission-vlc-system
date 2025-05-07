@@ -22,7 +22,7 @@ plt.ylabel("Bits (bit)")
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
-plt.xlim(0, 30)  # Set x-axis limit to 0-100 seconds
+# plt.xlim(0, 30)  # Set x-axis limit to 0-100 seconds
 
 
 # 💾 Optional: Save the figure as SVG
