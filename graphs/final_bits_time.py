@@ -5,7 +5,7 @@ import numpy as np
 
 # Then take the last number of the csv file name as the x-axis and the BER from the csv as the y-axis
 plt.rcParams.update({'font.size': 17})
-df = pd.read_csv('./method2/ber-transrate-method2-174.csv')
+df = pd.read_csv('./data/max-bitrate/ber-transrate-method2-174.csv')
 
 # 📈 Plotting
 plt.figure(figsize=(8, 6))
@@ -22,10 +22,7 @@ plt.ylabel("Bits (bit)")
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
-# plt.xlim(0, 30)  # Set x-axis limit to 0-100 seconds
 
-
-# 💾 Optional: Save the figure as SVG
-plt.savefig("total-bits-over-time.pdf", format='pdf', bbox_inches='tight')
+plt.savefig("./figures/final_total_bits_over_time.pdf", format='pdf', bbox_inches='tight')
 
 plt.show()

@@ -7,13 +7,13 @@ x1, y1 = [], []
 x2, y2 = [], []
 plt.rcParams.update({'font.size': 17})
 # Process files in method1
-files_method1 = os.listdir('./ber-distance/method1')
+files_method1 = os.listdir('./data/distance/method1')
 for file in files_method1:
     if file.endswith('.csv'):
         # Extract the last number from the filename
         last_number = file.split('-')[-1].split('.')[0]
         # Read the CSV file
-        df = pd.read_csv(f'./ber-distance/method1/{file}')
+        df = pd.read_csv(f'./data/distance/method1/{file}')
         x1.append(int(last_number))
         y1.append(df['Total Errors'].sum() / df['Total Bits'].tail(1))
 
@@ -21,13 +21,13 @@ for file in files_method1:
 x1, y1 = zip(*sorted(zip(x1, y1)))
 
 # Process files in method2
-files_method2 = os.listdir('./ber-distance/method2')
+files_method2 = os.listdir('./data/distance/method2')
 for file in files_method2:
     if file.endswith('.csv'):
         # Extract the last number from the filename
         last_number = file.split('-')[-1].split('.')[0]
         # Read the CSV file
-        df = pd.read_csv(f'./ber-distance/method2/{file}')
+        df = pd.read_csv(f'./data/distance/method2/{file}')
         x2.append(int(last_number))
         y2.append(df['Total Errors'].sum() / df['Total Bits'].tail(1))
 
@@ -50,10 +50,9 @@ plt.xlabel("Distance (cm)")
 plt.ylabel("Bit Error Rate (BER)")
 plt.ylim(-0.01)
 plt.grid(True)
-plt.legend()  # Add a legend to distinguish methods
+plt.legend()  
 plt.tight_layout()
 
-# 💾 Optional: Save the figure as SVG
-plt.savefig("ber_vs_distance_comparison.pdf", format='pdf', bbox_inches='tight')
+plt.savefig("./figures/final_distance_comparison.pdf", format='pdf', bbox_inches='tight')
 
 plt.show()

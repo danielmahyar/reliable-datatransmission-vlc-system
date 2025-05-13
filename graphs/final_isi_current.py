@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-df = pd.read_csv('./test3.csv')
+df = pd.read_csv('./data/isi/isi-method2-174.csv')
 
 plt.rcParams.update({'font.size': 17})
 # For each row, calculate the BER and add it as y-axis with x-axis as the time
@@ -17,6 +17,6 @@ plt.plot(df['Time'], df['BER'], color='red', linestyle='dashed', label="BER")  #
 plt.xlabel("Time (s)")  # Add label for x-axis
 plt.ylabel("BER")       # Add label for y-axis
 plt.title("BER vs Time sending 0x7E continously")  # Add title for the plot
-plt.savefig("ber_vs_time_0x7e_experimental.png", format='png', bbox_inches='tight')  # Save the figure as PDF
+plt.savefig("./figures/ber_vs_time_0x7e.png", format='png', bbox_inches='tight')  # Save the figure as PDF
 
 plt.show()

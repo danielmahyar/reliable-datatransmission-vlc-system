@@ -8,7 +8,7 @@ import os
 # Set global font size to 17 px
 plt.rcParams.update({'font.size': 17})
 
-df = pd.read_csv('./method2/ber-transrate-method2-174.csv')
+df = pd.read_csv('./data/max-bitrate/ber-transrate-method2-174.csv')
 
 # 📈 Plotting
 plt.figure(figsize=(8, 6))
@@ -26,7 +26,6 @@ plt.ylim(0,3000)
 plt.tight_layout()
 
 
-# 💾 Optional: Save the figure as SVG
-plt.savefig("bitrate-over-time.pdf", format='pdf', bbox_inches='tight')
+plt.savefig("./figures/final_bitrate_over_time.pdf", format='pdf', bbox_inches='tight')
 
 plt.show()

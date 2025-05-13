@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os
 import pandas as pd
 
-folders = os.listdir('./new-data')
+folders = os.listdir('./data/transmission')
 x = []
 y = []
 
@@ -16,9 +16,9 @@ for folder in folders:
     transmission_rate = (1 / (((int(folder) * 2) / 1e6)))
 
     # Read the first csv file to get the shape
-    df = pd.read_csv(f'./new-data/{folder}/1.csv')
-    df2 = pd.read_csv(f'./new-data/{folder}/2.csv')
-    df3 = pd.read_csv(f'./new-data/{folder}/3.csv')
+    df = pd.read_csv(f'./data/transmission/{folder}/1.csv')
+    df2 = pd.read_csv(f'./data/transmission/{folder}/2.csv')
+    df3 = pd.read_csv(f'./data/transmission/{folder}/3.csv')
 
     # Calculate the BER for each csv file
     ber1 = df["Total Errors"].sum() / float(df["Total Bits"].tail(1).iloc[0])
@@ -73,7 +73,7 @@ plt.grid(True, which="both", ls="--", alpha=0.7)
 
 # Add a legend
 # plt.legend()
-plt.savefig("ber_vs_transmission_rate_with_error_bars.pdf", format='pdf', bbox_inches='tight')
+plt.savefig("./figures/final_ber_vs_transmission_rate.pdf", format='pdf', bbox_inches='tight')
 
 
 # Display the plot

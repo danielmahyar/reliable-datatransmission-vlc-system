@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 
-df1 = pd.read_csv('./ber-lux/ber-lux-method1-7.csv')
-df2 = pd.read_csv('./ber-lux/ber-lux-method1-500.csv')
+df1 = pd.read_csv('./data/flickering/ber-lux-method1-7.csv')
+df2 = pd.read_csv('./data/flickering/ber-lux-method1-500.csv')
 BER1 = df1["Total Errors"].sum() / float(df1["Total Bits"].tail(1).iloc[0])
 BER2 = df2["Total Errors"].sum() / float(df2["Total Bits"].tail(1).iloc[0])
 # Data for comparison
@@ -24,5 +24,5 @@ plt.grid(axis='y', linestyle='--', alpha=0.7)
 plt.legend()  # Ensure legend is displayed
 # Show the plot
 plt.tight_layout()
-plt.savefig("ber_comparison_lux.pdf", format='pdf', bbox_inches='tight')
+plt.savefig("./figures/final_flickering_comp.pdf", format='pdf', bbox_inches='tight')
 plt.show()
