@@ -1,6 +1,6 @@
 #include "read_handler.h"
 
-uint32_t calculatedThreshold = THRESHOLD;
+uint32_t calculatedThreshold = 0;
 
 void setup_read_handler(){
     //TODO: Implement continous reading
