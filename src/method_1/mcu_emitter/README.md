@@ -1,2 +1,4 @@
-# Main Machine code for VLC Communication
+# Method 1 - Emitter
+
+
 
