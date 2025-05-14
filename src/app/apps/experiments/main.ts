@@ -14,8 +14,8 @@ const receiver = new SerialPort({
 
 const eventEmitter = new EventEmitter();
 let startReading = false;
-const EXPERIMENT_NAME = "/ber-lux-method1-500";
-const FILES_DIRECTORY = "./ber-lux/method1";
+const EXPERIMENT_NAME = "/1";
+const FILES_DIRECTORY = "./ber-transate/method2-new/1000";
 
 // Check if the directory exists, if not create it
 if (!existsSync(FILES_DIRECTORY)) {

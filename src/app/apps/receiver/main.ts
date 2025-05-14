@@ -4,10 +4,8 @@ import path from "path";
 import { SerialPort } from "serialport";
 import {
   reassemblePacket,
-  reassemblePacketWithErrors,
 } from "@repo/data-segmentation/reassemble"; // Import your utility function
 import { writeFileSync } from "fs";
-import { time } from "console";
 
 // Directory where your files are stored
 const FILES_DIRECTORY = path.join(process.cwd(), "public");
@@ -24,7 +22,6 @@ const port = new SerialPort({
 const tempBuffer: Buffer[] = [];
 const eventEmitter = new EventEmitter();
 let totalBits = 0;
-let totalErrors = 0;
 let flagCount = 0;
 const startTime = Date.now(); 
 let last_timestamp: any = null;
@@ -32,7 +29,7 @@ let last_timestamp: any = null;
 const now = new Date();
 const fileName = `${now.getHours()}-${now.getMinutes()}-${now.getDate()}-${now.getMonth() + 1}.csv`;
 
-writeFileSync(path.join(process.cwd(), "logs", fileName), "Time,Total Bits,Total Errors,BIT Error Rate,Bitrate\n");
+writeFileSync(path.join(process.cwd(), "logs", fileName), "Time,Total Bits,Bitrate\n");
 
 port.on("data", (data: Buffer) => {
   console.log("Data received:", data);
@@ -48,22 +45,18 @@ port.on("data", (data: Buffer) => {
 
     if (tempBuffer.length > 4) {
       flagCount = 0;
-      const reassembled = reassemblePacketWithErrors(Buffer.concat(tempBuffer));
-      totalBits += reassembled.totalBits;
-      totalErrors += reassembled.bitErrors;
+      const reassembled = reassemblePacket(Buffer.concat(tempBuffer));
+      totalBits += reassembled.length;
       const noww = Date.now();
       // Calculate the elapsed time in seconds
       const elapsedTime = (noww - last_timestamp) / 1000;
+      // Calculate the bitrate (bits per second)
+      const bitrate = (totalBits) / elapsedTime; // Convert bytes to bits
       last_timestamp = noww;
       // Calculate the bitrate (bits per second)
-      const bitrate = reassembled.totalBits / elapsedTime;
-      const bitErrorRate = totalErrors / totalBits;
-
-      console.log(`Packet processed. Total bits: ${totalBits}, Total errors: ${totalErrors}`);
-      console.log(`Bit Error Rate so far: ${bitErrorRate}`);
       console.log(`Bitrate: ${bitrate.toFixed(2)} bits/second`);
-      writeFileSync(path.join(process.cwd(), "logs", fileName), `${(noww - startTime) / 1000 },${totalBits},${totalErrors},${bitErrorRate},${bitrate}\n`, { flag: 'a' });
-      eventEmitter.emit("dataReceived", reassembled.data);
+      writeFileSync(path.join(process.cwd(), "logs", fileName), `${(noww - startTime) / 1000 },${totalBits},${bitrate}\n`, { flag: 'a' });
+      eventEmitter.emit("dataReceived", reassembled);
       tempBuffer.length = 0;
     } 
     return;

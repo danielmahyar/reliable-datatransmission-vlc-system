@@ -1,2 +1,2 @@
-# Main Machine code for VLC Communication
+# Method 2 - Receiver
 

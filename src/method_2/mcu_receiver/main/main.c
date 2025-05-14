@@ -21,7 +21,7 @@
 #define UART_RX_BUFFER_SIZE BUF_SIZE * 2 // Increase RX buffer size
 #define UART_TX_BUFFER_SIZE BUF_SIZE * 2 // Increase TX buffer size
 
-#define DEBUG 0  // Enable debug mode
+#define DEBUG 1  // Enable debug mode
 
 #if DEBUG == 1
 #define DEBUG_PRINT(...) printf(__VA_ARGS__)
@@ -31,6 +31,19 @@
 
 void setup();
 void isr_process();
+
+typedef enum AsyncState
+{
+    ASYNC_IDLE,
+    ASYNC_RECEIVING,
+} AsyncState;
+
+#define RX_BUFFER_SIZE 8 // Define UART_NUM_0 for UART1
+typedef struct {
+    uint8_t data[RX_BUFFER_SIZE]; // Buffer to store received data
+    size_t length;                     // Length of the received data
+    AsyncState state;                  // State of the asynchronous operation
+} AsyncData;
 
 typedef enum
 {
@@ -258,7 +271,7 @@ void timer_data_process()
     // Install UART driver
     ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
     ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 1, 3, -1, -1));
-    uart_driver_install(UART_NUM, UART_RX_BUFFER_SIZE, UART_TX_BUFFER_SIZE, 1000, NULL, 1);
+    uart_driver_install(UART_NUM, UART_RX_BUFFER_SIZE, UART_TX_BUFFER_SIZE, 500, NULL, 1);
 
     uint8_t received_bit;
     while (1)
@@ -322,13 +335,15 @@ void IRAM_ATTR timer_isr(void *arg)
     if (fsa_state == STATE_END && fsa_accepted == 0)
     {
         fsa_accepted = 1;
+        uint8_t decoded_bytee = decode_manchester_byte(received_buffer);
+        DEBUG_PRINT("Flag byte: %d\n", decoded_bytee);    
         // DEBUG_PRINT("Got to the end of FSA\n");
         received_buffer_index = 0;
         memset(received_buffer, 0, 16);
         // reset_fsa();
     }
 
-    if (received_buffer_index == 16)
+    if (received_buffer_index == 16 && fsa_accepted == 1)
     {
         // Send the bit to the queue
         if (is_valid_manchester(received_buffer) == 0)
@@ -343,8 +358,10 @@ void IRAM_ATTR timer_isr(void *arg)
 
             fsa_accepted = 0;
             reset_fsa();
+
+
             return;
-        }
+        } 
         uint8_t decoded_byte = decode_manchester_byte(received_buffer);
 
         //uart_write_bytes(UART_NUM_0, &decoded_byte, 1);
@@ -354,8 +371,12 @@ void IRAM_ATTR timer_isr(void *arg)
         DEBUG_PRINT("Decoded byte: %d\n", decoded_byte);
 
         received_buffer_index = 0;
-        memset(received_buffer, 0, 16);
-    }
+        memset(received_buffer, 0, 16);     
+
+        fsa_accepted = 0;
+        reset_fsa();
+        return;
+    } 
     // DEBUG_PRINT("E\n");
 }
 
@@ -376,7 +397,7 @@ void app_main(void)
     }
 
     // Create tasks on separate cores
-    xTaskCreatePinnedToCore(isr_process, "handle_reading_logic", 4096, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(isr_process, "handle_reading_logic", 4096, NULL,  configMAX_PRIORITIES - 1, NULL, 0);
     xTaskCreatePinnedToCore(timer_data_process, "timer_data_process", 4096, NULL, 5, NULL, 1);
 }
 
@@ -394,11 +415,9 @@ void isr_process()
     const esp_timer_create_args_t periodic_timer_args = {
         .callback = &timer_isr,
         .name = "periodic_timer",
-
     };
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 166)); // 50 microseconds
-
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 333)); // 50 microseconds
     while (1)
     {
         vTaskDelay(1000 / portTICK_PERIOD_MS);

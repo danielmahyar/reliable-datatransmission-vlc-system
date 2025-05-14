@@ -28,5 +28,5 @@
         "IDF_TARGET": "esp32"
     },
     "idf.pythonInstallPath": "C:\\Espressif\\tools\\idf-python\\3.11.2\\python.exe",
-    "idf.portWin": "COM4"
+    "idf.portWin": "COM3"
 }

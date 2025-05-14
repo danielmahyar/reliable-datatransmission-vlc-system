@@ -6,18 +6,10 @@
 #include "../components/logging/logging.h"
 #include "../components/manchester_encoding/manchesterencoding.h"
 #include "../api/read_handler/read_handler.h"
-#include "../api/light_handler/light_handler.h"
-#include "../api/serial/serial.h"
 #include "driver/uart.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "esp_task_wdt.h"
-
-#define UART_NUM UART_NUM_0 // Use UART1
-#define BUF_SIZE (1024)
-#define SHARED_ARRAY_SIZE 100
-#define BUFFER_SIZE 1024
-#define DEBUG 0
 
 #if DEBUG == 1
 #define DEBUG_PRINT(...) printf(__VA_ARGS__)
@@ -33,6 +25,7 @@ void reader_process();
 
 void app_main(void)
 {   
+    // Disable the watchdog timer to prevent task starvation issues
     esp_task_wdt_deinit();
     setup();
     DEBUG_PRINT("Setup complete");
@@ -45,65 +38,75 @@ void app_main(void)
         return;
     }
 
+    // Create tasks for sending and reading and attach them to different cores
+    // Core 0 is used for emitting and Core 1 is used for reading
     xTaskCreatePinnedToCore(receiver_process, "handle_reading_logic", 4096, NULL, 5, NULL, 0);
     xTaskCreatePinnedToCore(reader_process, "reader_process", 4096, NULL, 5, NULL, 1);
 }
 
 void setup()
 {
-
+    // Initialize the read handler
     setup_read_handler();
-    setup_light_handler();
 }
 
 void receiver_process()
 {
-    char message_from_sender[100] = {0};
-    int message_index = 0;
+    char message_from_sender[100] = {0}; // Buffer to store received message
+    int message_index = 0; // Index for the message buffer
 
-    uint8_t manchester_encoded[BYTE_MANCHESTER_SIZE] = {0};
+    uint8_t manchester_encoded[BYTE_MANCHESTER_SIZE] = {0}; // Buffer for Manchester encoded data
 
-    uint8_t has_synced = 0;
-    uint8_t first_byte = 0;
-    uint8_t message_size = 0;
+    uint8_t has_synced = 0; // Flag to indicate synchronization
+    uint8_t first_byte = 0; // Placeholder for the first byte
+    uint8_t message_size = 0; // Placeholder for the message size
 
     while (1)
     {
+        // Clear the Manchester encoded buffer
         memset(manchester_encoded, 0, 16);
+
+        // Read Manchester encoded bits
         for (int i = 0; i < BYTE_MANCHESTER_SIZE; i++)
         {
             manchester_encoded[i] = read_env_bit();
             vTaskDelay(SAMPLING_RATE / portTICK_PERIOD_MS);
         }
 
+        // Decode the Manchester encoded byte
         uint8_t decoded_byte = decode_manchester_byte(manchester_encoded);
-        // print binary representation of decoded byte
+
+        // Print binary representation of the decoded byte for debugging
         char binary[BYTE_SIZE];
         for (uint8_t i = 0; i < 8; i++)
         {
             binary[i] = (decoded_byte >> i) & 1;
         }
         DEBUG_PRINT("Decoded byte: %d - Binary: %d%d%d%d%d%d%d%d \n", decoded_byte, binary[7], binary[6], binary[5], binary[4], binary[3], binary[2], binary[1], binary[0]);
+
         if (has_synced == 1)
         {
-
+            // Send the decoded byte to the queue for further processing
             BaseType_t xHigherPriorityTaskWoken = pdFALSE;
             xQueueSendFromISR(timer_data_queue, &decoded_byte, &xHigherPriorityTaskWoken);
             continue;
         }
+
         if (decoded_byte != SYNC_BYTE)
         {
+            // Check if the Manchester encoding is valid
             uint8_t is_valid = is_valid_manchester(manchester_encoded);
 
             if (is_valid == 0)
             {
-                // log(INFORMATION, "Waiting for 25 ms");
+                // Wait for a short delay if the encoding is invalid
                 vTaskDelay(OFFSET_DELAY / portTICK_PERIOD_MS);
             }
             else
             {
                 uint32_t delay = SAMPLING_RATE;
-                // check if decoded byte has 2 consecutive 0s in binary representation (at some point in string)
+
+                // Adjust delay based on the decoded byte to achieve synchronization
                 if (decoded_byte == 63 || decoded_byte == 159 || decoded_byte == 207 || decoded_byte == 231 || decoded_byte == 243 || decoded_byte == 249 || decoded_byte == 252)
                 {
                     DEBUG_PRINT("Correct bits but missing sequence. Number %d", decoded_byte);
@@ -139,6 +142,7 @@ void receiver_process()
         }
         else
         {
+            // Synchronization achieved
             DEBUG_PRINT("SYNCED");
             has_synced = 1;
         }
@@ -149,7 +153,7 @@ void reader_process()
 {
     // Configure UART parameters
     uart_config_t uart_config = {
-        .baud_rate = 1000000,
+        .baud_rate = UART_BAUD_RATE,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
@@ -168,6 +172,7 @@ void reader_process()
         // Wait for data from the queue
         if (xQueueReceive(timer_data_queue, &received_bit, portMAX_DELAY))
         {
+            // Write the received byte to UART
             int bytes_written = uart_write_bytes(UART_NUM_0, &received_bit, 1);
             if (bytes_written < 0)
             {
