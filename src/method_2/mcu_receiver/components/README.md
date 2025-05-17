@@ -1,1 +1,3 @@
-# Isolated tests of modules
+# Shared components
+
+The components in this folder is shared across all implementations
