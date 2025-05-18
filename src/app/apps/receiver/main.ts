@@ -14,7 +14,7 @@ const PORT = 3002;
 
 
 const port = new SerialPort({
-  path: "COM4",
+  path: "/dev/tty.usbserial-0283CEF2",
     baudRate: 1000000,
 })
 

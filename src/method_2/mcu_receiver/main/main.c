@@ -69,6 +69,7 @@ void uart_process()
     }
 }
 
+uint8_t fsa_accepted = 0;
 uint8_t count = 0;
 static uint8_t busy_flag = 0;
 void IRAM_ATTR timer_isr(void *arg)
@@ -80,17 +81,16 @@ void IRAM_ATTR timer_isr(void *arg)
     }
     busy_flag = 1;
     uint8_t current_bit = read_env_bit();
-
-    #if DEBUG == 1
-        // Print the current bit
-        printf("%d", current_bit);
-        count++;
-        if (count == BYTE_MANCHESTER_SIZE)
-        {
-            count = 0;
-            printf("\n");
-        }
-    #endif
+    // #if DEBUG == 1
+    //     // Print the current bit
+    //     printf("%d", current_bit);
+    //     count++;
+    //     if (count == BYTE_MANCHESTER_SIZE)
+    //     {
+    //         count = 0;
+    //         printf("\n");
+    //     }
+    // #endif
 
     int8_t res = process_stable_bits(current_bit);
     busy_flag = 0;
@@ -107,10 +107,11 @@ void IRAM_ATTR timer_isr(void *arg)
     //  Process the bit through the FSA
     process_dfa(&fsa_state, received_buffer, &received_buffer_index, res);
 
-    if (fsa_state == STATE_END)
+    if (fsa_state == STATE_END && fsa_accepted == 0)
     {
         uint8_t decoded_bytee = decode_manchester_byte(received_buffer);
-        DEBUG_PRINT("Flag byte: %d\n", decoded_bytee);    
+        // DEBUG_PRINT("Flag byte: %d\n", decoded_bytee);    
+        fsa_accepted = 1;
         received_buffer_index = 0;
         memset(received_buffer, 0, BYTE_MANCHESTER_SIZE);
     }
@@ -143,7 +144,7 @@ void IRAM_ATTR timer_isr(void *arg)
         received_buffer_index = 0;
         memset(received_buffer, 0, BYTE_MANCHESTER_SIZE);     
 
-        reset_fsa(&fsa_state, received_buffer, &received_buffer_index);
+        // reset_fsa(&fsa_state, received_buffer, &received_buffer_index);
         return;
     } 
 }

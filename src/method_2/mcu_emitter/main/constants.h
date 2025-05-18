@@ -2,7 +2,7 @@
 
 // Hardware constants
 #define LED_GPIO 12
-#define SAMPLING_RATE 1000
+#define SAMPLING_RATE 10000
 #define NODE_ID 1
 
 #define UART_NUM UART_NUM_0 // Use UART1

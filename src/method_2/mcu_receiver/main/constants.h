@@ -3,8 +3,8 @@
 // Hardware constants
 #define LED_GPIO 12
 #define THRESHOLD 3800 
-#define SAMPLING_RATE 333
-#define DEBUG 1  // Enable debug mode
+#define SAMPLING_RATE 3333
+#define DEBUG 0  // Enable debug mode
 
 #define UART_BAUD_RATE 1000000
 #define UART_NUM UART_NUM_0 // Use UART1
