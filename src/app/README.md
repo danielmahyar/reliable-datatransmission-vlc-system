@@ -19,6 +19,15 @@ $ npm run install
 ```
 
 ## How to run Use Case
+To run the use case, you must run the receiver and uploader in seperate terminal windows. `cd` into the directories and run:
+```bash
+$ npm run dev 
+```
 
+Now you can navigate to http://localhost:3000 (uploader) and http://localhost:3002 (receiver)
 
 ## How to run Experiments
+`cd` into the experiment folder and run the following:
+```bash
+$ npm run dev 
+```
