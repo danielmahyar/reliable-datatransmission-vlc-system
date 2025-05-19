@@ -19,11 +19,12 @@ export function segmentFileIntoPackets(fileBuffer: Buffer, {
     const header = Buffer.alloc(4);
 
     // Populate header fields (only length and checksum)
-    header.writeUInt16BE(dataSegment.length, 0); // Length of the data segment with CRC
-    // Calculate checksum of data segment with CRC
-    const checksum = crypto.createHash("md5").update(dataSegment).digest();
-    checksum.copy(header, 2, 0, 2); // Copy first 4 bytes of checksum to header
+    header.writeUInt16BE(dataSegment.length, 0); // Length of the data segment 
+    // Calculate checksum of data segment 
+    const checksum = crypto.createHash("sha256").update(dataSegment).digest();
+    header.writeUInt16BE(checksum.readUInt16BE(0), 2); // Checksum of the data segment
 
+    console.log({ checksum})
     const stuffedFrame = bitStuff(Buffer.concat([header, dataSegment]));
 
     // Combine header and data into a single packet
