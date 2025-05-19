@@ -1,0 +1,22 @@
+{
+  "name": "segment-test",
+  "version": "1.0.0",
+  "main": "main.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon --no-warnings --exec node --loader ts-node/esm ./main.ts",
+    "start": "npx tsc && node ./dist/main.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": ""
+  },
+  "dependencies": {
+    "nodemon": "^3.1.9",
+    "@repo/data-segmentation": "*"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.1",
+    "@types/multer": "^1.4.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  }
+}
